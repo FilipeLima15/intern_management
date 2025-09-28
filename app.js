@@ -160,7 +160,7 @@ async function initApp(){
 
     // Se você quiser **gravar** o sample data automaticamente apenas na primeira execução,
     // descomente a linha abaixo. CUIDADO: isso grava no Firebase. COMENTAR PARA DESATIVAR
-    //await save(state);
+    await save(state);
   }
 
   render();
@@ -1440,7 +1440,7 @@ function showBulkImportModal(){
             <ul style="list-style-type: disc; padding-left: 20px; font-size: 14px;">
                 <li><strong>Coluna A: Nome completo</strong></li>
                 <li><strong>Coluna B: Usuário</strong> (Matrícula, ex: e710021)</li>
-                <li><strong>Coluna C: Senha</strong> (Se vazia, será 'senha123')</li>
+                <li><strong>Coluna C: Senha</strong> (Se vazia, será '123456')</li>
                 <li><strong>Coluna D: Permitir alteração de senha (Sim/Não)</strong></li>
             </ul>
             <div class="form-check" style="margin-top: 10px;">
@@ -1595,7 +1595,7 @@ function validateExcelData(sheetData) {
 
         const name = String(row[0] || '').trim();
         const username = String(row[1] || '').trim().toLowerCase();
-        const password = String(row[2] || '').trim() || 'senha123';
+        const password = String(row[2] || '').trim() || '123456';
         const allowSelfPwdText = String(row[3] || '').trim().toLowerCase();
         
         // Coluna D: 'Sim' ou 'Não'. Qualquer outra coisa é tratada como 'Não' (false)
