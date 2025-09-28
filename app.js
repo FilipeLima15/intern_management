@@ -6,7 +6,7 @@
 const firebaseConfig = {
 apiKey: "AIzaSyB93ZdN5Cg1NSgS2sbcgqedsp5h-KY2vk4",
 authDomain: "ecejusc3-estagiario.firebaseapp.com",
-databaseURL: "https://ecejusc3-estagiario-default-rtdb.firebaseio.com",
+databaseURL: "https://ecejusc3-estagiario-default-rtdb.firebaseio.com/",
 projectId: "ecejusc3-estagiario",
 storageBucket: "ecejusc3-estagiario.firebasestorage.app",
 messagingSenderId: "543649254671",
@@ -160,7 +160,7 @@ async function initApp(){
 
     // Se você quiser **gravar** o sample data automaticamente apenas na primeira execução,
     // descomente a linha abaixo. CUIDADO: isso grava no Firebase. COMENTAR PARA DESATIVAR
-    await save(state);
+    //await save(state);
   }
 
   render();
