@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Regras para Agendamento de Folga-Prova</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap" rel="stylesheet">
+
+    <style>
+        /* CSS embutido para um arquivo único */
+        
+        /* 1. Configurações Globais e Paleta de Cores (inspirado no seu projeto) */
+        :root {
+            --bg: #f5f6f7;
+            --panel: #ffffff;
+            --text: #333;
+            --accent: #013e4a;
+            --danger: #ef4444;
+            --card-shadow: 0 8px 24px rgba(16, 24, 40, 0.08);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', system-ui, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        /* 2. Estilo do Cartão (Card) Principal */
+        .rules-container {
+            background-color: var(--panel);
+            padding: 40px;
+            border-radius: 16px;
+            box-shadow: var(--card-shadow);
+            max-width: 800px;
+            width: 100%;
+            border-top: 5px solid var(--accent);
+        }
+
+        /* 3. Estilo do Título */
+        h1 {
+            color: var(--accent);
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 28px;
+            font-weight: 900; /* Mais pesado para destaque */
+        }
+
+        /* 4. Estilização da Lista de Regras */
+        .rules-list {
+            list-style: none; /* Remove os números padrão */
+            counter-reset: rules-counter; /* Inicia um contador para os números personalizados */
+            padding-left: 0;
+        }
+
+        .rules-list li {
+            font-size: 18px;
+            line-height: 1.7;
+            margin-bottom: 25px;
+            padding-left: 55px; /* Espaço para o número personalizado */
+            position: relative;
+        }
+
+        /* 5. Números Personalizados e Modernos */
+        .rules-list li::before {
+            counter-increment: rules-counter; /* Incrementa o contador a cada item da lista */
+            content: counter(rules-counter); /* Exibe o valor do contador */
+            
+            /* Estilo do círculo */
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 40px;
+            height: 40px;
+            background-color: var(--accent);
+            color: white;
+            border-radius: 50%;
+            
+            /* Centralização do número */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-weight: 700;
+            font-size: 18px;
+        }
+
+        /* 6. Estilo para o texto destacado em vermelho */
+        .highlight-red {
+            color: var(--danger);
+            font-weight: 700; /* Deixa o vermelho um pouco mais forte */
+        }
+        
+        /* Garante que o negrito dentro da lista mantenha a cor padrão do texto */
+        .rules-list strong {
+            color: var(--text);
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="rules-container">
+        <h1>Regras para Agendamento de Folga-Prova</h1>
+        
+        <ol class="rules-list">
+            <li>
+                Solicitar o calendário de provas ou documento que comprove o dia de prova com antecedência;
+            </li>
+            <li>
+                <strong>Apresentar, <span class="highlight-red">antecipadamente</span>, o calendário de provas para a supervisão do e-cejusc 3 e <span class="highlight-red">aguardar autorização</span>;</strong>
+            </li>
+            <li>
+                Após autorizado, agende a data que deseja na ferramenta.
+            </li>
+        </ol>
+    </div>
+
+</body>
+</html>
