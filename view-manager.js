@@ -26,7 +26,7 @@ let importedUserData = [];
 let userFilter = 'all';
 
 // Função principal de renderização, que será exportada
-export function renderManager(user) {
+export function renderManager(user, isDelegatedView = false) {
     const root = document.getElementById('root');
     root.innerHTML = '';
     root.className = 'app-grid';
@@ -35,13 +35,20 @@ export function renderManager(user) {
     const pendingClass = pendingCount > 0 ? 'has-pending' : '';
     const isSuperAdmin = user.role === 'super';
 
+    const backToInternButton = `
+        <div class="sidebar-item" id="btnBackToInternView" style="background-color: var(--accent-2); color: #13320f; font-weight: bold;">
+            <span>Voltar ao Perfil Estagiário</span>
+        </div>`;
+
     root.innerHTML = `
     <aside class="sidebar-nav">
       <div style="font-weight: bold; font-size: 1.2rem; color: var(--accent);">
         Painel de Gestão
       </div>
-      <div class="muted small">Usuário: ${escapeHtml(user.username)} • ${escapeHtml(user.role)}</div>
+      <div class="muted small">Usuário: ${escapeHtml(user.username)} • ${escapeHtml(isDelegatedView ? 'Admin Delegado' : user.role)}</div>
       
+      ${isDelegatedView ? backToInternButton : ''}
+
       ${isSuperAdmin ?
             `<button class="button" id="btnChangePwdSuper" style="width: 100%; margin: 8px 0;">Alterar Senha</button><hr style="border-color: #eee; margin: 8px 0;">` :
             (user.role === 'admin' && user.selfPasswordChange ?
@@ -58,6 +65,8 @@ export function renderManager(user) {
       <div class="sidebar-item" data-section="relatorios">
         <span>Relatórios de Horas</span>
       </div>
+      
+      ${!isDelegatedView ? `
       <div class="sidebar-item ${pendingClass}" data-section="pendentes">
         <span>Pré-cadastros Pendentes</span>
         <span id="pending-count-badge" class="badge" style="display: ${pendingCount > 0 ? 'inline-block' : 'none'};">${pendingCount}</span>
@@ -65,6 +74,7 @@ export function renderManager(user) {
       <div class="sidebar-item" data-section="configuracoes">
         <span>Configurações</span>
       </div>
+      ` : ''}
       
       ${user.role === 'super' ? `
       <div class="sidebar-item" id="btnSidebarBackup">
@@ -72,9 +82,11 @@ export function renderManager(user) {
       </div>
       ` : ''}
 
+      ${!isDelegatedView ? `
       <div class="sidebar-item" data-section="lixeira">
         <span>Lixeira</span>
       </div>
+      ` : ''}
 
       ${user.role === 'super' ? `
       <div class="sidebar-item" data-section="systemlogs">
@@ -217,6 +229,13 @@ export function renderManager(user) {
     <input type="file" id="fileBulkImport" style="display:none" accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" />
     `;
 
+    if (isDelegatedView) {
+        document.getElementById('btnBackToInternView').addEventListener('click', () => {
+            session.viewMode = 'intern';
+            render();
+        });
+    }
+
     document.querySelectorAll('#userFilterButtons button').forEach(button => {
         button.addEventListener('click', (e) => {
             userFilter = e.currentTarget.dataset.filter;
@@ -257,8 +276,8 @@ export function renderManager(user) {
     document.querySelectorAll('.sidebar-item').forEach(item => {
         item.addEventListener('click', (e) => {
             const sectionId = e.currentTarget.dataset.section;
-            if (e.currentTarget.id === 'btnSidebarBackup') {
-                showBackupModal();
+            if (e.currentTarget.id === 'btnSidebarBackup' || e.currentTarget.id === 'btnBackToInternView') {
+                if (e.currentTarget.id === 'btnSidebarBackup') showBackupModal();
                 return;
             }
             document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
@@ -295,23 +314,33 @@ export function renderManager(user) {
             document.getElementById('mgrNameDropdown').style.display = 'none';
         }
     });
-    document.getElementById('cfgBlockDays').value = String((state.meta || {}).provaBlockDays || 5);
-    document.getElementById('btnSaveConfig').addEventListener('click', async () => {
-        const val = Number(document.getElementById('cfgBlockDays').value || 0);
-        state.meta.provaBlockDays = val;
-        await save(state);
-        alert('Configuração salva.');
-    });
-    document.getElementById('cfgTrashRetention').value = String((state.meta || {}).trashRetentionDays || 10);
-    document.getElementById('btnSaveRetention').addEventListener('click', async () => {
-        const val = Number(document.getElementById('cfgTrashRetention').value || 10);
-        state.meta.trashRetentionDays = val;
-        await save(state);
-        alert('Período de retenção salvo.');
-    });
-    document.getElementById('btnEmptyTrash').addEventListener('click', emptyTrash);
-    document.getElementById('btnRestoreAll').addEventListener('click', restoreAllTrash);
-    document.getElementById('btnRestoreSelected').addEventListener('click', restoreSelectedTrash);
+    
+    // As seções de config/lixeira podem não existir para delegados, então checamos
+    const cfgBlockDays = document.getElementById('cfgBlockDays');
+    if (cfgBlockDays) {
+        cfgBlockDays.value = String((state.meta || {}).provaBlockDays || 5);
+        document.getElementById('btnSaveConfig').addEventListener('click', async () => {
+            const val = Number(document.getElementById('cfgBlockDays').value || 0);
+            state.meta.provaBlockDays = val;
+            await save(state);
+            alert('Configuração salva.');
+        });
+    }
+    
+    const cfgTrashRetention = document.getElementById('cfgTrashRetention');
+    if(cfgTrashRetention) {
+        cfgTrashRetention.value = String((state.meta || {}).trashRetentionDays || 10);
+        document.getElementById('btnSaveRetention').addEventListener('click', async () => {
+            const val = Number(document.getElementById('cfgTrashRetention').value || 10);
+            state.meta.trashRetentionDays = val;
+            await save(state);
+            alert('Período de retenção salvo.');
+        });
+        document.getElementById('btnEmptyTrash').addEventListener('click', emptyTrash);
+        document.getElementById('btnRestoreAll').addEventListener('click', restoreAllTrash);
+        document.getElementById('btnRestoreSelected').addEventListener('click', restoreSelectedTrash);
+    }
+    
     renderUsersList();
 }
 
@@ -900,7 +929,10 @@ function renderUsersList() {
         const row = document.createElement('div');
         row.className = 'row user-row-selectable';
         const internName = u.role === 'intern' ? (findInternById(u.internId)?.name || '') : '';
-        const displayName = u.role === 'intern' ? `${escapeHtml(internName)} (${escapeHtml(u.username)})` : `${escapeHtml(u.name || u.username)}`;
+        
+        const delegatedIndicator = u.delegatedAdmin?.enabled ? '🧑‍💼 ' : '';
+        const displayName = u.role === 'intern' ? `${delegatedIndicator}${escapeHtml(internName)} (${escapeHtml(u.username)})` : `${escapeHtml(u.name || u.username)}`;
+        
         const roleText = u.role === 'intern' ? 'Estagiário' : u.role;
         const roleAndDateDisplay = `${roleText} (${formatDate(u.createdAt)})`;
         const checkboxHtml = canDelete ? `<input type="checkbox" data-user-id="${u.id}" class="user-select-checkbox" />` : '<div class="icon-placeholder"></div>';
@@ -971,12 +1003,83 @@ function renderReports() {
     area.innerHTML = negHtml + bankHtml;
 }
 
+function showDelegationModal(user) {
+    const isDelegated = user.delegatedAdmin?.enabled;
+    const currentPowers = user.delegatedAdmin?.powers || {};
+    const currentManager = (state.users || []).find(u => u.id === session.userId);
+
+    const html = `
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <h3>Delegar Poderes — ${escapeHtml(user.name)}</h3>
+      <button class="button ghost" id="closeDelegate">Fechar</button>
+    </div>
+    <form id="formDelegate" style="margin-top:10px;display:flex;flex-direction:column;gap:10px">
+        <label class="form-check" style="background: var(--input-bg); padding: 10px; border-radius: 8px;">
+            <input type="checkbox" id="delegateEnabled" ${isDelegated ? 'checked' : ''} />
+            <strong style="color: var(--accent);">Habilitar acesso de "Admin Delegado" para este estagiário</strong>
+        </label>
+        
+        <div id="adminPowersDelegate" style="display:${isDelegated ? 'block' : 'none'};">
+            <div class="small-muted" style="margin: 8px 0;">Selecione os poderes a serem delegados:</div>
+            <div class="form-check-group">
+                <label class="form-check"><input type="checkbox" id="p_create" ${currentPowers.create_intern ? 'checked' : ''}/> Criar estagiários</label>
+                <label class="form-check"><input type="checkbox" id="p_edit" ${currentPowers.edit_user ? 'checked' : ''}/> Editar usuários</label>
+                <label class="form-check"><input type="checkbox" id="p_delete" ${currentPowers.delete_user ? 'checked' : ''}/> Excluir usuários</label>
+                <label class="form-check"><input type="checkbox" id="p_reset" ${currentPowers.reset_password ? 'checked' : ''}/> Resetar senhas</label>
+                <label class="form-check"><input type="checkbox" id="p_manage" ${currentPowers.manage_hours ? 'checked' : ''}/> Gerenciar horas</label>
+                <label class="form-check"><input type="checkbox" id="p_provas" ${currentPowers.manage_provas ? 'checked' : ''}/> Gerenciar folgas-prova</label>
+                ${hasPower(currentManager, 'delegate_admins') && currentManager.role === 'super' ? `<label class="form-check"><input type="checkbox" id="p_delegate"/> Delegar admins</label>` : ''}
+            </div>
+        </div>
+        <div style="display:flex;gap:8px;justify-content:flex-end; margin-top: 15px;">
+            <button type="submit" class="button">Salvar Delegação</button>
+        </div>
+    </form>
+    `;
+    const m = showModal(html, { allowBackdropClose: false });
+    m.modal.querySelector('#closeDelegate').addEventListener('click', () => { m.close(); m.cleanup(); });
+
+    const enabledCheckbox = m.modal.querySelector('#delegateEnabled');
+    const powersDiv = m.modal.querySelector('#adminPowersDelegate');
+    enabledCheckbox.addEventListener('change', () => {
+        powersDiv.style.display = enabledCheckbox.checked ? 'block' : 'none';
+    });
+    
+    m.modal.querySelector('#formDelegate').addEventListener('submit', async (ev) => {
+        ev.preventDefault();
+        const enabled = enabledCheckbox.checked;
+        const delegateCheckbox = m.modal.querySelector('#p_delegate');
+        const powers = {
+            create_intern: m.modal.querySelector('#p_create').checked,
+            edit_user: m.modal.querySelector('#p_edit').checked,
+            delete_user: m.modal.querySelector('#p_delete').checked,
+            reset_password: m.modal.querySelector('#p_reset').checked,
+            manage_hours: m.modal.querySelector('#p_manage').checked,
+            manage_provas: m.modal.querySelector('#p_provas').checked,
+            delegate_admins: delegateCheckbox ? delegateCheckbox.checked : false
+        };
+
+        user.delegatedAdmin = { enabled, powers };
+
+        await save(state);
+        alert('Delegação de poderes atualizada com sucesso!');
+        m.close();
+        m.cleanup();
+        render();
+    });
+}
+
 function openUserManagerView(userId) {
     const u = (state.users || []).find(x => x.id === userId);
     if (!u) return;
     const intern = u.internId ? findInternById(u.internId) : null;
     const canDelete = u.role !== 'super';
     const currentManager = (state.users || []).find(uu => uu.id === session.userId);
+
+    const delegateButtonHtml = hasPower(currentManager, 'delegate_admins') && u.role === 'intern'
+        ? `<button id="btnDelegateAdmin" class="button alt">${u.delegatedAdmin?.enabled ? 'Gerenciar Delegação' : 'Delegar Admin'}</button>`
+        : '';
+
     const html = `
     <div style="display:flex;justify-content:space-between;align-items:center">
       <h3>Gerenciar: ${escapeHtml(u.username)} ${u.role === 'intern' ? '• ' + escapeHtml(intern?.name || '') : ''}</h3>
@@ -984,6 +1087,7 @@ function openUserManagerView(userId) {
     </div>
     <div style="margin-top:12px; padding-top:12px; border-top:1px solid #eee;">
       <div style="display:flex;gap:8px;flex-wrap:wrap">
+        ${delegateButtonHtml}
         ${u.role === 'intern' ? '<button id="btnViewRegData" class="button alt">Exibir Dados</button>' : ''}
         ${hasPower(currentManager, 'reset_password') ? '<button id="btnResetPwd" class="button ghost">Resetar senha</button>' : ''}
         ${u.role === 'intern' ? `
@@ -995,6 +1099,16 @@ function openUserManagerView(userId) {
     </div>`;
     const m = showModal(html, { allowBackdropClose: false });
     m.modal.querySelector('#btnCloseView').addEventListener('click', () => { m.close(); m.cleanup(); });
+
+    const btnDelegate = m.modal.querySelector('#btnDelegateAdmin');
+    if (btnDelegate) {
+        btnDelegate.addEventListener('click', () => {
+            m.close();
+            m.cleanup();
+            showDelegationModal(u);
+        });
+    }
+
     const btnViewRegData = m.modal.querySelector('#btnViewRegData');
     if (btnViewRegData) {
         btnViewRegData.addEventListener('click', () => {
@@ -1471,27 +1585,34 @@ function renderSystemLogs(filterDate = null) {
     const btnClearFilter = document.getElementById('btnClearLogFilter');
     const btnClearLogs = document.getElementById('btnClearLogs');
     
-    btnApply.onclick = () => {
-        const date = document.getElementById('logFilterDate').value;
-        if (date) {
-            renderSystemLogs(date);
-        }
-    };
+    // Evita erro caso os botões não existam na DOM
+    if(btnApply) {
+        btnApply.onclick = () => {
+            const date = document.getElementById('logFilterDate').value;
+            if (date) {
+                renderSystemLogs(date);
+            }
+        };
+    }
 
-    btnClearFilter.onclick = () => {
-        document.getElementById('logFilterDate').value = '';
-        renderSystemLogs();
-    };
-
-    btnClearLogs.onclick = async () => {
-        if (confirm('ATENÇÃO: Esta ação é irreversível e apagará TODOS os registros de atividades de TODOS os estagiários e do sistema. Deseja continuar?')) {
-            (state.interns || []).forEach(intern => {
-                intern.auditLog = [];
-            });
-            state.systemLog = [];
-            await save(state);
-            alert('Todos os logs foram limpos.');
+    if(btnClearFilter) {
+        btnClearFilter.onclick = () => {
+            document.getElementById('logFilterDate').value = '';
             renderSystemLogs();
-        }
-    };
+        };
+    }
+    
+    if(btnClearLogs) {
+        btnClearLogs.onclick = async () => {
+            if (confirm('ATENÇÃO: Esta ação é irreversível e apagará TODOS os registros de atividades de TODOS os estagiários e do sistema. Deseja continuar?')) {
+                (state.interns || []).forEach(intern => {
+                    intern.auditLog = [];
+                });
+                state.systemLog = [];
+                await save(state);
+                alert('Todos os logs foram limpos.');
+                renderSystemLogs();
+            }
+        };
+    }
 }
