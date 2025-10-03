@@ -239,6 +239,13 @@ const backToInternButton = `
 
             <div id="access" class="tab-content">
               <div class="muted small">Registros de todos os logins bem-sucedidos no sistema.</div>
+              
+              <div style="display:flex; gap: 10px; margin-top: 12px; align-items: center;">
+                  <input type="text" id="loginLogSearchInput" placeholder="Filtrar por nome ou usuário..." style="flex-grow: 1; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--input-border);">
+                  <input type="date" id="loginLogDateInput" style="max-width: 180px; padding: 5px 8px; border-radius: 8px; border: 1px solid var(--input-border);">
+                  <button class="button ghost" id="btnClearLoginLogFilter" style="flex-shrink: 0;">Limpar Filtros</button>
+              </div>
+
               <div style="display:flex;gap:16px;margin-top:12px;align-items:center">
                   <div class="form-check">
                       <input type="checkbox" id="selectAllLoginLogs" style="width: auto; height: auto;">
@@ -1605,15 +1612,30 @@ function renderActivityLogs(filterDate = null) {
     }
 }
 
-// NOVO: Função para renderizar o histórico de acesso
-function renderLoginLogs() {
+// NOVO: Função para renderizar o histórico de acesso com filtros
+function renderLoginLogs(searchQuery = '', filterDate = '') {
     const container = document.getElementById('loginLogContainer');
     if (!container) return;
 
-    const logs = (state.loginLog || []).slice().sort((a, b) => new Date(b.at) - new Date(a.at));
+    let logs = (state.loginLog || []).slice();
+
+    // Aplicar filtros
+    if (searchQuery) {
+        logs = logs.filter(log =>
+            (log.name || '').toLowerCase().includes(searchQuery) ||
+            (log.username || '').toLowerCase().includes(searchQuery)
+        );
+    }
+
+    if (filterDate) {
+        logs = logs.filter(log => log.at && log.at.startsWith(filterDate));
+    }
+
+    // Ordenar após filtrar
+    logs.sort((a, b) => new Date(b.at) - new Date(a.at));
 
     if (logs.length === 0) {
-        container.innerHTML = '<div class="muted">Nenhum registro de acesso encontrado.</div>';
+        container.innerHTML = '<div class="muted">Nenhum registro de acesso encontrado para os filtros aplicados.</div>';
     } else {
         container.innerHTML = logs.map(log => {
             const date = new Date(log.at).toLocaleString('pt-BR');
@@ -1685,7 +1707,26 @@ function renderSystemLogs() {
         }
     };
 
-    // Listeners para os controles de logs de ACESSO (LOGIN)
+    // Listeners para os filtros e controles de logs de ACESSO (LOGIN)
+    const searchInput = document.getElementById('loginLogSearchInput');
+    const dateInput = document.getElementById('loginLogDateInput');
+    const btnClearLoginFilter = document.getElementById('btnClearLoginLogFilter');
+
+    const applyLoginFilters = () => {
+        const query = searchInput.value.trim().toLowerCase();
+        const date = dateInput.value;
+        renderLoginLogs(query, date);
+    };
+
+    searchInput.addEventListener('keyup', applyLoginFilters);
+    dateInput.addEventListener('change', applyLoginFilters);
+
+    btnClearLoginFilter.addEventListener('click', () => {
+        searchInput.value = '';
+        dateInput.value = '';
+        applyLoginFilters(); // Re-renderiza a lista completa
+    });
+
     const selectAllLoginLogs = document.getElementById('selectAllLoginLogs');
     const btnDeleteSelected = document.getElementById('btnDeleteSelectedLoginLogs');
     const btnClearAll = document.getElementById('btnClearLoginLogs');
