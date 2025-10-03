@@ -71,7 +71,7 @@ const defaultRegistrationData = {
     university: '',
     universityOther: '',
     currentSemester: '',
-    lastUpdatedAt: null // NOVO: Campo para controlar a data da última atualização
+    lastUpdatedAt: null
 };
 
 // ----------------- CARREGAMENTO E DADOS INICIAIS -----------------
@@ -82,7 +82,7 @@ function sampleData() {
         { id: uuid(), username: 'admin', name: 'Administrador Principal', password: '', role: 'super', powers: defaultPowersFor('super'), selfPasswordChange: true, createdAt: now },
         { id: uuid(), username: 'est1', password: '123456', role: 'intern', internId: 'intern-1', powers: defaultPowersFor('intern'), selfPasswordChange: true, createdAt: now }
     ];
-    return { users, interns, meta: { created: now, provaBlockDays: 0, trashRetentionDays: 10 }, pendingRegistrations: [], trash: [], systemLog: [] };
+    return { users, interns, meta: { created: now, provaBlockDays: 0, trashRetentionDays: 10 }, pendingRegistrations: [], trash: [], systemLog: [], loginLog: [] };
 }
 
 async function load() {
@@ -90,7 +90,7 @@ async function load() {
         const snapshot = await database.ref('/appState').once('value');
         const data = snapshot.val();
         if (!data) {
-            return { users: [], interns: [], meta: { created: timestamp(), provaBlockDays: 0, trashRetentionDays: 10 }, pendingRegistrations: [], trash: [], systemLog: [] };
+            return { users: [], interns: [], meta: { created: timestamp(), provaBlockDays: 0, trashRetentionDays: 10 }, pendingRegistrations: [], trash: [], systemLog: [], loginLog: [] };
         }
         const parsed = data;
         parsed.meta = parsed.meta || {};
@@ -102,6 +102,7 @@ async function load() {
         parsed.pendingRegistrations = parsed.pendingRegistrations || [];
         parsed.trash = parsed.trash || [];
         parsed.systemLog = parsed.systemLog || [];
+        parsed.loginLog = parsed.loginLog || []; // NOVO: Garante que o log de login exista
         parsed.users = (parsed.users || []).map(u => ({
             id: u.id || uuid(),
             ...u,
@@ -110,16 +111,14 @@ async function load() {
         return parsed;
     } catch (e) {
         console.error("Erro ao carregar dados do Firebase:", e);
-        return { users: [], interns: [], meta: { created: timestamp(), provaBlockDays: 0, trashRetentionDays: 10 }, pendingRegistrations: [], trash: [], systemLog: [] };
+        return { users: [], interns: [], meta: { created: timestamp(), provaBlockDays: 0, trashRetentionDays: 10 }, pendingRegistrations: [], trash: [], systemLog: [], loginLog: [] };
     }
 }
 
 // ----------------- LÓGICA PRINCIPAL DA APLICAÇÃO -----------------
 async function initApp() {
-    // Mostra tela de carregamento
     root.innerHTML = '<div style="display:flex;justify-content:center;align-items:center;min-height:100vh;"><h2>Inicializando aplicação...</h2></div>';
     
-    // IMPORTANTE: Inicializa a autenticação ANTES de carregar dados
     const authSuccess = await initAuth();
     
     if (!authSuccess) {
@@ -147,14 +146,12 @@ async function initApp() {
     cleanupRejectedRegistrations();
 }
 
-// Funções de busca globais
 function findUserByIntern(internId) { return state.users.find(u => u.internId === internId); }
 function findInternById(id) { return (state.interns || []).find(i => i.id === id); }
 function hasPower(user, power) {
     if (!user) return false;
     if (user.role === 'super') return true;
 
-    // NOVO: Lógica para checar poderes delegados
     if (user.delegatedAdmin?.enabled && session.viewMode === 'admin') {
         return !!(user.delegatedAdmin.powers && user.delegatedAdmin.powers[power]);
     }
@@ -162,7 +159,6 @@ function hasPower(user, power) {
     return !!(user.powers && user.powers[power]);
 }
 
-// Função de logout acessível globalmente
 window.logout = () => {
     session = null;
     sessionStorage.removeItem('app_session');
@@ -184,18 +180,14 @@ function render() {
         return;
     }
 
-    // LÓGICA DE RENDERIZAÇÃO CORRIGIDA
     if (user.role === 'intern') {
-        // Se for estagiário, verifica se ele deve ver a tela de admin delegado
         if (user.delegatedAdmin?.enabled && session.viewMode === 'admin') {
-            renderManager(user, true); // O 'true' indica que é uma visão delegada
+            renderManager(user, true);
         } else {
-            // Caso contrário, mostra a tela normal de estagiário
-            session.viewMode = 'intern'; // Garante que o modo de visão está correto
+            session.viewMode = 'intern';
             renderIntern(user);
         }
     } else {
-        // Se for admin ou super, mostra a tela de gestão
         renderManager(user);
     }
 }
@@ -231,16 +223,45 @@ function renderLogin() {
     document.getElementById('btnLogin').addEventListener('click', async () => {
         const u = document.getElementById('inpUser').value.trim();
         const p = document.getElementById('inpPass').value;
-        const rememberMe = document.getElementById('rememberMeCheckbox').checked; // NOVO: Captura o estado do checkbox
+        const rememberMe = document.getElementById('rememberMeCheckbox').checked;
         const user = (state.users || []).find(x => x.username === u && x.password === p);
         
         if (!user) return alert('Usuário ou senha inválidos');
 
-        // NOVO: Lógica para salvar ou remover o usuário do localStorage
         if (rememberMe) {
             localStorage.setItem('rememberedUser', u);
         } else {
             localStorage.removeItem('rememberedUser');
+        }
+
+        // NOVO: Lógica para registrar o login
+        try {
+            const response = await fetch('https://api.ipify.org?format=json');
+            const data = await response.json();
+            const ip = data.ip;
+
+            state.loginLog = state.loginLog || [];
+            state.loginLog.push({
+                id: uuid(),
+                userId: user.id,
+                username: user.username,
+                name: user.name || (findInternById(user.internId) || {}).name || 'N/A',
+                at: timestamp(),
+                ip: ip
+            });
+            await save(state); // Salva o estado com o novo registro de login
+
+        } catch (error) {
+            console.error("Não foi possível obter o IP. Registrando login sem IP.", error);
+            state.loginLog.push({
+                id: uuid(),
+                userId: user.id,
+                username: user.username,
+                name: user.name || (findInternById(user.internId) || {}).name || 'N/A',
+                at: timestamp(),
+                ip: 'IP não obtido'
+            });
+            await save(state);
         }
 
         session = { userId: user.id };
@@ -260,12 +281,11 @@ function renderLogin() {
         toggleLoginPass.textContent = type === 'password' ? '🔒' : '🔓';
     });
 
-    // NOVO: Lógica para preencher o campo de usuário ao carregar a página
     const rememberedUser = localStorage.getItem('rememberedUser');
     if (rememberedUser) {
         document.getElementById('inpUser').value = rememberedUser;
         document.getElementById('rememberMeCheckbox').checked = true;
-        document.getElementById('inpPass').focus(); // Foca no campo de senha para conveniência
+        document.getElementById('inpPass').focus();
     }
 }
 
