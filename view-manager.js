@@ -377,7 +377,6 @@ const backToInternButton = `
     renderUsersList();
 }
 
-// ... (O restante das funções como generateCsvData, showBackupModal, etc., permanecem as mesmas)
 function generateCsvData() {
     const allEntries = [];
     (state.interns || []).forEach(intern => {
@@ -525,7 +524,7 @@ function showBulkImportModal() {
             <div class="muted small">A planilha deve conter 4 colunas na primeira aba, com a primeira linha sendo o cabeçalho:</div>
             <ul style="list-style-type: disc; padding-left: 20px; font-size: 14px;">
                 <li><strong>Coluna A: Nome completo</strong></li>
-                <li><strong>Coluna B: Usuário</strong> (Matrícula, ex: e710021)</li>
+                <li><strong>Coluna B: Usuário</strong> (Matrícula, ex: e710856 ou t320239)</li>
                 <li><strong>Coluna C: Senha</strong> (Se vazia, será '123456')</li>
                 <li><strong>Coluna D: Permitir alteração de senha (Sim/Não)</strong></li>
             </ul>
@@ -584,7 +583,7 @@ function showBulkImportModal() {
         const creationDate = timestamp();
         for (const userData of importedUserData) {
             const internId = uuid();
-            (state.interns || []).push({ id: internId, name: userData.name, dates: [], hoursEntries: [], auditLog: [] });
+            (state.interns || []).push({ id: internId, name: userData.name, dates: [], hoursEntries: [], auditLog: [], registrationData: { enrollmentId: userData.username, cpf: '' } });
             (state.users || []).push({ id: uuid(), username: userData.username, name: userData.name, password: userData.password, role:'intern', internId, powers: defaultPowersFor('intern'), selfPasswordChange: userData.allowSelfPwd, createdAt: creationDate });
         }
         await save(state);
@@ -604,7 +603,7 @@ function validateExcelData(sheetData) {
         const password = String(row[2] || '').trim() || '123456';
         const allowSelfPwdText = String(row[3] || '').trim().toLowerCase();
         const allowSelfPwd = allowSelfPwdText === 'sim';
-        const isMatriculaValid = /^e\d{6}$/.test(username);
+        const isMatriculaValid = /^[et]\d{6}$/i.test(username);
         if (!name || !username || !isMatriculaValid || existingUsernames.has(username)) {
             console.warn(`Linha ${index + 2} ignorada: dados inválidos ou usuário já existente.`);
             return;
@@ -630,7 +629,7 @@ function renderPendingList() {
         row.innerHTML = `
       <div>
         <div style="font-weight:700">${escapeHtml(reg.name)}</div>
-        <div class="muted small">Usuário: ${escapeHtml(reg.username)}</div>
+        <div class="muted small">Login com ${reg.identifierType}: ${escapeHtml(reg.identifier)}</div>
         <div class="muted small">Solicitado em: ${new Date(reg.createdAt).toLocaleString()}</div>
       </div>
       <div style="display:flex;gap:8px;">
@@ -647,13 +646,25 @@ function renderPendingList() {
 async function approveRegistration(regId) {
     const reg = (state.pendingRegistrations || []).find(r => r.id === regId);
     if (!reg) return;
+
     const internId = uuid();
-    const newIntern = { id: internId, name: reg.name, dates: [], hoursEntries: [], auditLog: [] };
+    let newUsername, registrationData;
+
+    if (reg.identifierType === 'cpf') {
+        newUsername = `temp_${uuid().slice(0, 6)}`; // Matrícula temporária
+        registrationData = { cpf: reg.identifier, enrollmentId: '' };
+    } else { // matricula
+        newUsername = reg.identifier;
+        registrationData = { cpf: '', enrollmentId: reg.identifier };
+    }
+    
+    const newIntern = { id: internId, name: reg.name, dates: [], hoursEntries: [], auditLog: [], registrationData };
     (state.interns || []).push(newIntern);
-    (state.users || []).push({ id: uuid(), username: reg.username, name: reg.name, password: reg.password, role: 'intern', internId, powers: defaultPowersFor('intern'), selfPasswordChange: true, createdAt: timestamp() });
+
+    (state.users || []).push({ id: uuid(), username: newUsername, name: reg.name, password: reg.password, role: 'intern', internId, powers: defaultPowersFor('intern'), selfPasswordChange: true, createdAt: timestamp() });
     
     const manager = (state.users || []).find(u => u.id === session.userId);
-    newIntern.auditLog.push({ id: uuid(), action: 'approve_registration', byUserId: manager.id, byUserName: manager.username, at: timestamp(), details: `Pré-cadastro de '${reg.name}' (${reg.username}) foi aprovado.` });
+    newIntern.auditLog.push({ id: uuid(), action: 'approve_registration', byUserId: manager.id, byUserName: manager.username, at: timestamp(), details: `Pré-cadastro de '${reg.name}' (${reg.identifier}) foi aprovado.` });
 
     state.pendingRegistrations = (state.pendingRegistrations || []).filter(r => r.id !== regId);
     await save(state);
@@ -670,7 +681,7 @@ async function rejectRegistration(regId) {
     (state.trash || []).push(reg);
     
     const manager = (state.users || []).find(u => u.id === session.userId);
-    (state.systemLog || []).push({ id: uuid(), action: 'reject_registration', byUserId: manager.id, byUserName: manager.username, at: timestamp(), details: `Pré-cadastro de '${reg.name}' (${reg.username}) foi recusado.`, context: 'Gerenciamento de Usuários' });
+    (state.systemLog || []).push({ id: uuid(), action: 'reject_registration', byUserId: manager.id, byUserName: manager.username, at: timestamp(), details: `Pré-cadastro de '${reg.name}' (${reg.identifier}) foi recusado.`, context: 'Gerenciamento de Usuários' });
 
     state.pendingRegistrations = (state.pendingRegistrations || []).filter(r => r.id !== regId);
     await save(state);
@@ -1370,8 +1381,13 @@ function showCreateUserForm(currentManager){
     <div style="display:flex;justify-content:space-between;align-items:center"><h3>Criar usuário</h3><button id="closeC" class="button ghost">Fechar</button></div>
     <form id="formCreate" style="margin-top:10px;display:flex;flex-direction:column;gap:10px">
       <label><span class="small-muted">Tipo</span><select id="newType"><option value="intern">Estagiário</option><option value="admin">Admin secundário</option></select></label>
+      <div id="internFields">
+        <label><span class="small-muted">Criar com</span>
+          <select id="newIdType"><option value="matricula">Matrícula</option><option value="cpf">CPF</option></select>
+        </label>
+      </div>
       <label id="labelNewName"><span class="small-muted">Nome completo</span><input id="newName" required/></label>
-      <label><span class="small-muted">Usuário (login/matrícula)</span><input id="newUser" required/></label>
+      <label id="labelNewUser"><span class="small-muted">Usuário (login/matrícula)</span><input id="newUser" required/></label>
       <label style="position:relative;"><span class="small-muted">Senha</span>
         <input id="newPass" type="password" value="123456" style="padding-right: 36px;"/>
         <span class="password-toggle-icon" id="toggleNewPass">🔒</span>
@@ -1405,10 +1421,35 @@ function showCreateUserForm(currentManager){
     toggle.textContent = type === 'password' ? '🔒' : '🔓';
   });
 
+  const idTypeSelect = m.modal.querySelector('#newIdType');
+  const userLabel = m.modal.querySelector('#labelNewUser .small-muted');
+  const userInput = m.modal.querySelector('#newUser');
+
+  const updateCreateUserField = () => {
+    if (idTypeSelect.value === 'cpf') {
+      userLabel.textContent = "CPF do estagiário";
+      userInput.placeholder = "Apenas 11 números";
+      userInput.maxLength = 11;
+      userInput.oninput = () => { userInput.value = userInput.value.replace(/[^0-9]/g, ''); };
+    } else {
+      userLabel.textContent = "Matrícula do estagiário";
+      userInput.placeholder = "ex: e123456";
+      userInput.maxLength = 7;
+      userInput.oninput = null;
+    }
+  };
+
+  idTypeSelect.addEventListener('change', updateCreateUserField);
+
   m.modal.querySelector('#newType').addEventListener('change', (e)=> {
     const isIntern = e.target.value === 'intern';
+    m.modal.querySelector('#internFields').style.display = isIntern ? 'block' : 'none';
     m.modal.querySelector('#adminPowers').style.display = isIntern ? 'none' : 'block';
     if (!isIntern) {
+        userLabel.textContent = "Usuário (login)";
+        userInput.placeholder = "";
+        userInput.maxLength = 50;
+        userInput.oninput = null;
         const defaultAdminPowers = defaultPowersFor('admin');
         m.modal.querySelector('#p_create').checked = defaultAdminPowers.create_intern;
         m.modal.querySelector('#p_edit').checked = defaultAdminPowers.edit_user;
@@ -1417,14 +1458,19 @@ function showCreateUserForm(currentManager){
         m.modal.querySelector('#p_manage').checked = defaultAdminPowers.manage_hours;
         m.modal.querySelector('#p_provas').checked = defaultAdminPowers.manage_provas;
         m.modal.querySelector('#p_delegate').checked = false;
+    } else {
+      updateCreateUserField();
     }
   });
+
   m.modal.querySelector('#formCreate').addEventListener('submit', async (ev)=> {
     ev.preventDefault();
     const type = m.modal.querySelector('#newType').value;
     const name = m.modal.querySelector('#newName').value.trim();
-    const uname = m.modal.querySelector('#newUser').value.trim();
-    if(!name || !uname) return alert('Nome e usuário são obrigatórios');
+    const identifier = m.modal.querySelector('#newUser').value.trim();
+    
+    if(!name || !identifier) return alert('Nome e identificador (matrícula/CPF) são obrigatórios');
+
     const pass = m.modal.querySelector('#newPass').value || '123456';
     const allowSelf = !!m.modal.querySelector('#allowSelfPwd').checked;
     
@@ -1432,12 +1478,30 @@ function showCreateUserForm(currentManager){
     const creationDate = timestamp();
 
     if(type==='intern'){
+      const idType = idTypeSelect.value;
+      let newUsername, registrationData;
+
+      if (idType === 'cpf') {
+        if (identifier.length !== 11 || !/^\d+$/.test(identifier)) return alert('CPF inválido. Deve conter 11 números.');
+        newUsername = `temp_${uuid().slice(0, 6)}`;
+        registrationData = { cpf: identifier, enrollmentId: '' };
+      } else { // matricula
+        if (!/^[et]\d{6}$/i.test(identifier)) return alert("Matrícula inválida. Use 'e' ou 't' + 6 números.");
+        newUsername = identifier;
+        registrationData = { cpf: '', enrollmentId: identifier };
+      }
+
+      if (state.users.some(u => u.username.toLowerCase() === newUsername.toLowerCase())) {
+        return alert(`O usuário/matrícula '${newUsername}' já existe.`);
+      }
+
       const id = uuid();
-      const newIntern = { id, name, dates: [], hoursEntries: [], auditLog: [] };
+      const newIntern = { id, name, dates: [], hoursEntries: [], auditLog: [], registrationData };
       (state.interns || []).push(newIntern);
-      (state.users || []).push({ id: uuid(), username: uname, name, password: pass, role:'intern', internId: id, powers: defaultPowersFor('intern'), selfPasswordChange: allowSelf, createdAt: creationDate });
-      newIntern.auditLog.push({ id: uuid(), action: 'create_user', byUserId: manager.id, byUserName: manager.username, at: creationDate, details: `Criou o perfil de estagiário '${name}' (${uname}).` });
-    } else {
+      (state.users || []).push({ id: uuid(), username: newUsername, name, password: pass, role:'intern', internId: id, powers: defaultPowersFor('intern'), selfPasswordChange: allowSelf, createdAt: creationDate });
+      newIntern.auditLog.push({ id: uuid(), action: 'create_user', byUserId: manager.id, byUserName: manager.username, at: creationDate, details: `Criou o perfil de estagiário '${name}' com ${idType}: ${identifier}.` });
+
+    } else { // admin
       const p_create = m.modal.querySelector('#p_create').checked;
       const p_edit = m.modal.querySelector('#p_edit').checked;
       const p_delete = m.modal.querySelector('#p_delete').checked;
@@ -1446,8 +1510,8 @@ function showCreateUserForm(currentManager){
       const p_provas = m.modal.querySelector('#p_provas').checked;
       const p_delegate = m.modal.querySelector('#p_delegate').checked && currentManager.role==='super';
       const powers = { create_intern: p_create, edit_user: p_edit, delete_user: p_delete, reset_password: p_reset, manage_hours: p_manage, manage_provas: p_provas, delegate_admins: p_delegate };
-      (state.users || []).push({ id: uuid(), username: uname, name, password: pass, role:'admin', powers, selfPasswordChange: true, createdAt: creationDate });
-      (state.systemLog || []).push({ id: uuid(), action: 'create_user', byUserId: manager.id, byUserName: manager.username, at: creationDate, details: `Criou o perfil de admin '${name}' (${uname}).`, context: 'Gerenciamento de Usuários' });
+      (state.users || []).push({ id: uuid(), username: identifier, name, password: pass, role:'admin', powers, selfPasswordChange: true, createdAt: creationDate });
+      (state.systemLog || []).push({ id: uuid(), action: 'create_user', byUserId: manager.id, byUserName: manager.username, at: creationDate, details: `Criou o perfil de admin '${name}' (${identifier}).`, context: 'Gerenciamento de Usuários' });
     }
     await save(state);
     alert('Usuário criado');
@@ -1612,7 +1676,6 @@ function renderActivityLogs(filterDate = null) {
     }
 }
 
-// NOVO: Função para renderizar o histórico de acesso com filtros
 function renderLoginLogs(searchQuery = '', filterDate = '') {
     const container = document.getElementById('loginLogContainer');
     if (!container) return;
@@ -1652,13 +1715,11 @@ function renderLoginLogs(searchQuery = '', filterDate = '') {
         }).join('');
     }
     
-    // Adiciona listeners para os checkboxes individuais
     document.querySelectorAll('.login-log-checkbox').forEach(cb => {
         cb.addEventListener('change', updateDeleteLoginLogsButtonState);
     });
 }
 
-// NOVO: Função para atualizar o estado dos botões de exclusão de logs de login
 function updateDeleteLoginLogsButtonState() {
     const selectedCount = document.querySelectorAll('.login-log-checkbox:checked').length;
     const deleteButton = document.getElementById('btnDeleteSelectedLoginLogs');
