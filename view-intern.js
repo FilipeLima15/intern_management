@@ -60,6 +60,15 @@ export function renderIntern(user) {
         </div>
     `;
 
+    // NOVO: Lógica para criar os botões de troca de perfil (se aplicável)
+    let profileSwitcherHtml = '';
+    if (user.delegatedAdmin?.enabled) {
+        profileSwitcherHtml = `
+            <button class="button" id="btnSwitchToIntern" disabled>Perfil Estagiário</button>
+            <button class="button ghost" id="btnSwitchToAdmin">Admin Delegado</button>
+        `;
+    }
+
     card.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
       <div>
@@ -69,6 +78,7 @@ export function renderIntern(user) {
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
         <button class="button ghost" id="btnLogout">Sair</button>
         <button class="button" id="btnExportSelf">Exportar</button>
+        ${profileSwitcherHtml}
         ${user.selfPasswordChange ? '<button class="button ghost" id="btnChangePwdSelf">Alterar senha</button>' : ''}
         <button class="button alt" id="btnRegistrationData">Dados cadastrais</button>
       </div>
@@ -115,6 +125,15 @@ export function renderIntern(user) {
     </div>
   `;
     root.appendChild(card);
+
+    // NOVO: Adiciona o listener para o botão de troca de perfil, se ele existir
+    const btnSwitchToAdmin = document.getElementById('btnSwitchToAdmin');
+    if (btnSwitchToAdmin) {
+        btnSwitchToAdmin.addEventListener('click', () => {
+            session.viewMode = 'admin'; // Define o modo de visualização
+            render(); // Re-renderiza a aplicação
+        });
+    }
 
     document.getElementById('inpMyProva').value = nowISO();
 
