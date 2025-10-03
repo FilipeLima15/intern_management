@@ -65,7 +65,7 @@ export function renderIntern(user) {
     if (user.delegatedAdmin?.enabled) {
         profileSwitcherHtml = `
             <button class="button" id="btnSwitchToIntern" disabled>Perfil Estagiário</button>
-            <button class="button ghost" id="btnSwitchToAdmin">Admin Delegado</button>
+            <button class="button ghost" id="btnSwitchToAdmin">Perfil admin</button>
         `;
     }
 
