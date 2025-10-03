@@ -80,7 +80,7 @@ function sampleData() {
     const interns = [{ id: 'intern-1', name: `Estagiário 1`, dates: [], hoursEntries: [], auditLog: [], registrationData: { ...defaultRegistrationData } }];
     const users = [
         { id: uuid(), username: 'admin', name: 'Administrador Principal', password: '', role: 'super', powers: defaultPowersFor('super'), selfPasswordChange: true, createdAt: now },
-        { id: uuid(), username: 'est1', password: '123456', role: 'intern', internId: 'intern-1', powers: defaultPowersFor('intern'), selfPasswordChange: true, createdAt: now }
+        { id: uuid(), username: 'e123456', password: '123456', role: 'intern', internId: 'intern-1', powers: defaultPowersFor('intern'), selfPasswordChange: true, createdAt: now }
     ];
     return { users, interns, meta: { created: now, provaBlockDays: 0, trashRetentionDays: 10 }, pendingRegistrations: [], trash: [], systemLog: [], loginLog: [] };
 }
@@ -102,7 +102,7 @@ async function load() {
         parsed.pendingRegistrations = parsed.pendingRegistrations || [];
         parsed.trash = parsed.trash || [];
         parsed.systemLog = parsed.systemLog || [];
-        parsed.loginLog = parsed.loginLog || []; // NOVO: Garante que o log de login exista
+        parsed.loginLog = parsed.loginLog || [];
         parsed.users = (parsed.users || []).map(u => ({
             id: u.id || uuid(),
             ...u,
@@ -200,41 +200,82 @@ function renderLogin() {
     card.innerHTML = `
     <h2>Entrar</h2>
     <div class="login-input-group">
-      <input id="inpUser" placeholder="Usuário" class="input-modern" />
-      <div class="password-wrapper">
-        <input id="inpPass" placeholder="Senha" type="password" class="input-modern" />
-        <span class="password-toggle-icon" id="toggleLoginPass">🔒</span>
-      </div>
-
-      <div class="form-check" style="justify-content: flex-start; margin-top: 5px;">
-          <input type="checkbox" id="rememberMeCheckbox" style="width: auto; height: auto;">
-          <label for="rememberMeCheckbox" style="font-size: 14px; color: var(--muted); cursor: pointer;">Lembrar-me</label>
-      </div>
-      
-      <div class="login-buttons">
-        <button class="button" id="btnLogin">Entrar</button>
-        <button class="button ghost" id="btnNewUserLogin">Novo usuário</button>
-        <button class="button ghost small" id="btnForgotPass">Esqueci a senha</button>
-      </div>
+        <div style="display: flex; gap: 8px; align-items: center; width: 100%;">
+            <select id="loginType" class="input-modern" style="width: 130px; flex-shrink: 0;">
+                <option value="matricula" selected>Matrícula</option>
+                <option value="cpf">CPF</option>
+            </select>
+            <input id="inpUser" placeholder="Digite sua matrícula" class="input-modern" style="flex-grow: 1;" />
+        </div>
+        <div class="password-wrapper">
+            <input id="inpPass" placeholder="Senha" type="password" class="input-modern" />
+            <span class="password-toggle-icon" id="toggleLoginPass">🔒</span>
+        </div>
+        <div class="form-check" style="justify-content: flex-start; margin-top: 5px;">
+            <input type="checkbox" id="rememberMeCheckbox" style="width: auto; height: auto;">
+            <label for="rememberMeCheckbox" style="font-size: 14px; color: var(--muted); cursor: pointer;">Lembrar-me</label>
+        </div>
+        <div class="login-buttons">
+            <button class="button" id="btnLogin">Entrar</button>
+            <button class="button ghost" id="btnNewUserLogin">Novo usuário</button>
+            <button class="button ghost small" id="btnForgotPass">Esqueci a senha</button>
+        </div>
     </div>
   `;
     root.appendChild(card);
 
+    const loginTypeSelect = document.getElementById('loginType');
+    const userInput = document.getElementById('inpUser');
+
+    // Função para atualizar o campo de input com base na seleção
+    const updateUserField = () => {
+        const selection = loginTypeSelect.value;
+        if (selection === 'cpf') {
+            userInput.placeholder = "Digite seu CPF (11 dígitos)";
+            userInput.maxLength = 11;
+            userInput.oninput = () => { userInput.value = userInput.value.replace(/[^0-9]/g, ''); };
+        } else { // matricula
+            userInput.placeholder = "Digite sua matrícula";
+            userInput.maxLength = 7;
+            userInput.oninput = null; // Remove o filtro de números
+        }
+        userInput.value = ''; // Limpa o campo ao trocar
+        userInput.focus();
+    };
+
+    loginTypeSelect.addEventListener('change', updateUserField);
+
     document.getElementById('btnLogin').addEventListener('click', async () => {
-        const u = document.getElementById('inpUser').value.trim();
+        const loginType = loginTypeSelect.value;
+        const u = userInput.value.trim();
         const p = document.getElementById('inpPass').value;
         const rememberMe = document.getElementById('rememberMeCheckbox').checked;
-        const user = (state.users || []).find(x => x.username === u && x.password === p);
         
-        if (!user) return alert('Usuário ou senha inválidos');
+        let user = null;
+
+        if (loginType === 'matricula') {
+            // Procura por matrícula (case-insensitive) e senha
+            user = (state.users || []).find(x => x.username.toLowerCase() === u.toLowerCase() && x.password === p);
+        } else { // loginType === 'cpf'
+            // Procura por CPF e senha
+            user = (state.users || []).find(x => {
+                if (x.password !== p) return false;
+                if (x.role === 'intern' && x.internId) {
+                    const intern = findInternById(x.internId);
+                    return intern && intern.registrationData && intern.registrationData.cpf === u;
+                }
+                return false;
+            });
+        }
+        
+        if (!user) return alert('Credenciais inválidas. Verifique os dados e o tipo de login selecionado.');
 
         if (rememberMe) {
-            localStorage.setItem('rememberedUser', u);
+            localStorage.setItem('rememberedUser', user.username);
         } else {
             localStorage.removeItem('rememberedUser');
         }
 
-        // NOVO: Lógica para registrar o login
         try {
             const response = await fetch('https://api.ipify.org?format=json');
             const data = await response.json();
@@ -242,24 +283,17 @@ function renderLogin() {
 
             state.loginLog = state.loginLog || [];
             state.loginLog.push({
-                id: uuid(),
-                userId: user.id,
-                username: user.username,
+                id: uuid(), userId: user.id, username: user.username,
                 name: user.name || (findInternById(user.internId) || {}).name || 'N/A',
-                at: timestamp(),
-                ip: ip
+                at: timestamp(), ip: ip
             });
-            await save(state); // Salva o estado com o novo registro de login
-
+            await save(state);
         } catch (error) {
             console.error("Não foi possível obter o IP. Registrando login sem IP.", error);
             state.loginLog.push({
-                id: uuid(),
-                userId: user.id,
-                username: user.username,
+                id: uuid(), userId: user.id, username: user.username,
                 name: user.name || (findInternById(user.internId) || {}).name || 'N/A',
-                at: timestamp(),
-                ip: 'IP não obtido'
+                at: timestamp(), ip: 'IP não obtido'
             });
             await save(state);
         }
@@ -273,17 +307,16 @@ function renderLogin() {
     document.getElementById('btnNewUserLogin').addEventListener('click', showPreRegistrationModal);
     document.getElementById('btnForgotPass').addEventListener('click', showForgotPasswordModal);
 
-    const toggleLoginPass = document.getElementById('toggleLoginPass');
-    toggleLoginPass.addEventListener('click', () => {
+    document.getElementById('toggleLoginPass').addEventListener('click', () => {
         const inpPass = document.getElementById('inpPass');
         const type = inpPass.getAttribute('type') === 'password' ? 'text' : 'password';
         inpPass.setAttribute('type', type);
-        toggleLoginPass.textContent = type === 'password' ? '🔒' : '🔓';
+        document.getElementById('toggleLoginPass').textContent = type === 'password' ? '🔒' : '🔓';
     });
 
     const rememberedUser = localStorage.getItem('rememberedUser');
     if (rememberedUser) {
-        document.getElementById('inpUser').value = rememberedUser;
+        userInput.value = rememberedUser;
         document.getElementById('rememberMeCheckbox').checked = true;
         document.getElementById('inpPass').focus();
     }
