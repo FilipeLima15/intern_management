@@ -138,7 +138,12 @@ export function showPreRegistrationModal() {
     <form id="formPreReg" style="margin-top:10px;display:flex;flex-direction:column;gap:10px">
       <label><span class="small-muted">Tipo</span><input value="Estagiário" disabled class="input" /></label>
       <label><span class="small-muted">Nome completo do estagiário</span><input id="preRegName" required/></label>
-      <label><span class="small-muted">Usuário (matrícula: ex. e710021)</span><input id="preRegUser" required/></label>
+      
+      <label><span class="small-muted">Quero me cadastrar com</span>
+        <select id="preRegIdType"><option value="matricula">Matrícula</option><option value="cpf">CPF</option></select>
+      </label>
+      <label id="preRegUserLabel"><span class="small-muted">Usuário (matrícula: ex. e710856 ou t320239)</span><input id="preRegUser" required/></label>
+      
       <label style="position:relative;"><span class="small-muted">Senha</span>
         <input type="password" id="preRegPass" required style="padding-right: 36px;"/>
         <span class="password-toggle-icon" id="togglePreRegPass1">🔒</span>
@@ -154,6 +159,28 @@ export function showPreRegistrationModal() {
   `;
     const m = showModal(html);
     m.modal.querySelector('#closePreReg').addEventListener('click', () => { m.close(); m.cleanup(); });
+
+    const idTypeSelect = m.modal.querySelector('#preRegIdType');
+    const userLabel = m.modal.querySelector('#preRegUserLabel .small-muted');
+    const userInput = m.modal.querySelector('#preRegUser');
+
+    const updatePreRegField = () => {
+      if (idTypeSelect.value === 'cpf') {
+        userLabel.textContent = "CPF";
+        userInput.placeholder = "Digite os 11 números do seu CPF";
+        userInput.maxLength = 11;
+        userInput.oninput = () => { userInput.value = userInput.value.replace(/[^0-9]/g, ''); };
+      } else {
+        userLabel.textContent = "Matrícula";
+        userInput.placeholder = "ex: e123456";
+        userInput.maxLength = 7;
+        userInput.oninput = null;
+      }
+      userInput.value = '';
+    };
+
+    idTypeSelect.addEventListener('change', updatePreRegField);
+    updatePreRegField(); // Chama uma vez para iniciar corretamente
 
     const togglePreRegPass1 = m.modal.querySelector('#togglePreRegPass1');
     const preRegPass = m.modal.querySelector('#preRegPass');
@@ -174,23 +201,32 @@ export function showPreRegistrationModal() {
     m.modal.querySelector('#formPreReg').addEventListener('submit', async (ev) => {
         ev.preventDefault();
         const name = m.modal.querySelector('#preRegName').value.trim();
-        const user = m.modal.querySelector('#preRegUser').value.trim();
+        const identifier = userInput.value.trim();
+        const identifierType = idTypeSelect.value;
         const pass = m.modal.querySelector('#preRegPass').value;
         const passConfirm = m.modal.querySelector('#preRegPassConfirm').value;
 
-        if (!name || !user || !pass || !passConfirm) return alert('Por favor, preencha todos os campos.');
+        if (!name || !identifier || !pass || !passConfirm) return alert('Por favor, preencha todos os campos.');
         if (pass !== passConfirm) return alert('As senhas não coincidem.');
 
-        const matriculaRegex = /^e\d{6}$/;
-        if (!matriculaRegex.test(user)) {
-            alert('Inserir sua matrícula com a letra "e" seguida de 6 números (ex: e710021).');
-            return;
+        if (identifierType === 'matricula') {
+            const matriculaRegex = /^[et]\d{6}$/i;
+            if (!matriculaRegex.test(identifier)) {
+                alert("Formato de matrícula inválido. Use a letra 'e' ou 't' seguida por 6 números (ex: e123456 ou t123456).");
+                return;
+            }
+        } else { // cpf
+            if (identifier.length !== 11 || !/^\d+$/.test(identifier)) {
+                alert('CPF inválido. Deve conter exatamente 11 números.');
+                return;
+            }
         }
 
         const newPreReg = {
             id: uuid(),
             name,
-            username: user,
+            identifier: identifier,
+            identifierType: identifierType,
             password: pass,
             createdAt: timestamp(),
             status: 'pending'
