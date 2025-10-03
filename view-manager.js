@@ -35,10 +35,19 @@ export function renderManager(user, isDelegatedView = false) {
     const pendingClass = pendingCount > 0 ? 'has-pending' : '';
     const isSuperAdmin = user.role === 'super';
 
-    const backToInternButton = `
-        <div class="sidebar-item" id="btnBackToInternView" style="background-color: var(--accent-2); color: #13320f; font-weight: bold;">
-            <span>Voltar ao Perfil Estagiário</span>
-        </div>`;
+const backToInternButton = `
+    <div class="sidebar-item" id="btnBackToInternView" 
+        style="
+            background: linear-gradient(135deg, #004d61, #007b9e);
+            color: #fff;
+            font-weight: bold;
+            border-radius: 8px;
+            padding: 12px 18px;
+            text-align: center;
+            cursor: pointer;
+        ">
+        <span>Voltar ao Perfil Estagiário</span>
+    </div>`;
 
     root.innerHTML = `
     <aside class="sidebar-nav">
@@ -211,17 +220,35 @@ export function renderManager(user, isDelegatedView = false) {
       </div>
       <div id="systemlogs" class="content-section">
         <div class="card">
-            <div style="display:flex;justify-content:space-between;align-items:center;">
-                <h3>Logs do Sistema</h3>
-                <button id="btnClearLogs" class="button danger">Limpar Logs</button>
+            <h3>Logs do Sistema</h3>
+            <div class="tabs" style="margin-bottom: 15px;">
+              <button class="tab-button active" data-tab="activity">Logs de Atividade</button>
+              <button class="tab-button" data-tab="access">Histórico de Acesso</button>
             </div>
-            <div class="muted small">Todas as atividades registradas no sistema.</div>
-            <div style="display:flex;gap:8px;margin-top:12px;align-items:center">
-                <input type="date" id="logFilterDate" />
-                <button class="button" id="btnApplyLogFilter">Filtrar por Data</button>
-                <button class="button ghost" id="btnClearLogFilter">Mostrar Todos</button>
+
+            <div id="activity" class="tab-content active">
+              <div class="muted small">Todas as atividades registradas no sistema.</div>
+              <div style="display:flex;gap:8px;margin-top:12px;align-items:center">
+                  <input type="date" id="logFilterDate" />
+                  <button class="button" id="btnApplyLogFilter">Filtrar por Data</button>
+                  <button class="button ghost" id="btnClearLogFilter">Mostrar Todos</button>
+                  <button id="btnClearActivityLogs" class="button danger" style="margin-left: auto;">Limpar Logs de Atividade</button>
+              </div>
+              <div id="logListContainer" style="margin-top:12px; max-height: 600px; overflow-y: auto;"></div>
             </div>
-            <div id="logListContainer" style="margin-top:12px; max-height: 600px; overflow-y: auto;"></div>
+
+            <div id="access" class="tab-content">
+              <div class="muted small">Registros de todos os logins bem-sucedidos no sistema.</div>
+              <div style="display:flex;gap:16px;margin-top:12px;align-items:center">
+                  <div class="form-check">
+                      <input type="checkbox" id="selectAllLoginLogs" style="width: auto; height: auto;">
+                      <label for="selectAllLoginLogs">Selecionar Tudo</label>
+                  </div>
+                  <button id="btnDeleteSelectedLoginLogs" class="button ghost" disabled>Apagar Selecionados</button>
+                  <button id="btnClearLoginLogs" class="button danger" style="margin-left: auto;">Apagar Todo o Histórico</button>
+              </div>
+              <div id="loginLogContainer" style="margin-top:12px; max-height: 600px; overflow-y: auto;"></div>
+            </div>
         </div>
       </div>
     </main>
@@ -315,7 +342,6 @@ export function renderManager(user, isDelegatedView = false) {
         }
     });
     
-    // As seções de config/lixeira podem não existir para delegados, então checamos
     const cfgBlockDays = document.getElementById('cfgBlockDays');
     if (cfgBlockDays) {
         cfgBlockDays.value = String((state.meta || {}).provaBlockDays || 5);
@@ -344,6 +370,7 @@ export function renderManager(user, isDelegatedView = false) {
     renderUsersList();
 }
 
+// ... (O restante das funções como generateCsvData, showBackupModal, etc., permanecem as mesmas)
 function generateCsvData() {
     const allEntries = [];
     (state.interns || []).forEach(intern => {
@@ -1535,32 +1562,28 @@ function renderNameDropdown(q){
   dropdown.style.display = 'block';
 }
 
-function renderSystemLogs(filterDate = null) {
+function renderActivityLogs(filterDate = null) {
     const container = document.getElementById('logListContainer');
     if (!container) return;
 
     let allLogs = [];
-
-    // Coleta logs dos estagiários
     (state.interns || []).forEach(intern => {
         (intern.auditLog || []).forEach(log => {
             allLogs.push({ ...log, context: `Estagiário: ${intern.name}` });
         });
     });
-
-    // Coleta logs do sistema (globais)
     (state.systemLog || []).forEach(log => {
-        allLogs.push({ ...log, context: log.context || 'Sistema' }); // Usa contexto do log ou um padrão
+        allLogs.push({ ...log, context: log.context || 'Sistema' });
     });
 
-    allLogs.sort((a, b) => b.at.localeCompare(a.at));
+    allLogs.sort((a, b) => new Date(b.at) - new Date(a.at));
 
     if (filterDate) {
         allLogs = allLogs.filter(log => log.at.startsWith(filterDate));
     }
 
     if (allLogs.length === 0) {
-        container.innerHTML = '<div class="muted">Nenhum registro de log encontrado.</div>';
+        container.innerHTML = '<div class="muted">Nenhum registro de log de atividade encontrado.</div>';
     } else {
         container.innerHTML = allLogs.map(log => {
             const date = new Date(log.at).toLocaleString('pt-BR');
@@ -1580,39 +1603,121 @@ function renderSystemLogs(filterDate = null) {
             `;
         }).join('');
     }
+}
 
+// NOVO: Função para renderizar o histórico de acesso
+function renderLoginLogs() {
+    const container = document.getElementById('loginLogContainer');
+    if (!container) return;
+
+    const logs = (state.loginLog || []).slice().sort((a, b) => new Date(b.at) - new Date(a.at));
+
+    if (logs.length === 0) {
+        container.innerHTML = '<div class="muted">Nenhum registro de acesso encontrado.</div>';
+    } else {
+        container.innerHTML = logs.map(log => {
+            const date = new Date(log.at).toLocaleString('pt-BR');
+            return `
+                <div class="row" style="display: grid; grid-template-columns: auto 1fr auto; gap: 15px; align-items: center;">
+                    <input type="checkbox" class="login-log-checkbox" data-id="${log.id}" style="width: auto; height: auto;">
+                    <div>
+                        <div style="font-weight: 700;">${escapeHtml(log.name)} (${escapeHtml(log.username)})</div>
+                        <div class="muted small">IP: ${escapeHtml(log.ip)}</div>
+                    </div>
+                    <div class="muted small" style="text-align: right;">${date}</div>
+                </div>
+            `;
+        }).join('');
+    }
+    
+    // Adiciona listeners para os checkboxes individuais
+    document.querySelectorAll('.login-log-checkbox').forEach(cb => {
+        cb.addEventListener('change', updateDeleteLoginLogsButtonState);
+    });
+}
+
+// NOVO: Função para atualizar o estado dos botões de exclusão de logs de login
+function updateDeleteLoginLogsButtonState() {
+    const selectedCount = document.querySelectorAll('.login-log-checkbox:checked').length;
+    const deleteButton = document.getElementById('btnDeleteSelectedLoginLogs');
+    if (deleteButton) {
+        deleteButton.disabled = selectedCount === 0;
+        deleteButton.textContent = `Apagar Selecionados (${selectedCount})`;
+    }
+}
+
+
+function renderSystemLogs() {
+    // Lógica das abas
+    document.querySelectorAll('.tab-button').forEach(button => {
+        button.addEventListener('click', () => {
+            const tabId = button.dataset.tab;
+            document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            button.classList.add('active');
+            document.getElementById(tabId).classList.add('active');
+        });
+    });
+
+    renderActivityLogs();
+    renderLoginLogs(); // Renderiza a nova aba
+
+    // Listeners para os controles de logs de ATIVIDADE
     const btnApply = document.getElementById('btnApplyLogFilter');
     const btnClearFilter = document.getElementById('btnClearLogFilter');
-    const btnClearLogs = document.getElementById('btnClearLogs');
+    const btnClearLogs = document.getElementById('btnClearActivityLogs');
     
-    // Evita erro caso os botões não existam na DOM
-    if(btnApply) {
-        btnApply.onclick = () => {
-            const date = document.getElementById('logFilterDate').value;
-            if (date) {
-                renderSystemLogs(date);
-            }
-        };
-    }
+    btnApply.onclick = () => {
+        const date = document.getElementById('logFilterDate').value;
+        renderActivityLogs(date);
+    };
+    btnClearFilter.onclick = () => {
+        document.getElementById('logFilterDate').value = '';
+        renderActivityLogs();
+    };
+    btnClearLogs.onclick = async () => {
+        if (confirm('ATENÇÃO: Deseja apagar TODOS os registros de ATIVIDADE? Esta ação é irreversível.')) {
+            (state.interns || []).forEach(intern => { intern.auditLog = []; });
+            state.systemLog = [];
+            await save(state);
+            alert('Logs de atividade limpos.');
+            renderActivityLogs();
+        }
+    };
 
-    if(btnClearFilter) {
-        btnClearFilter.onclick = () => {
-            document.getElementById('logFilterDate').value = '';
-            renderSystemLogs();
-        };
-    }
+    // Listeners para os controles de logs de ACESSO (LOGIN)
+    const selectAllLoginLogs = document.getElementById('selectAllLoginLogs');
+    const btnDeleteSelected = document.getElementById('btnDeleteSelectedLoginLogs');
+    const btnClearAll = document.getElementById('btnClearLoginLogs');
+
+    selectAllLoginLogs.addEventListener('change', () => {
+        document.querySelectorAll('.login-log-checkbox').forEach(cb => {
+            cb.checked = selectAllLoginLogs.checked;
+        });
+        updateDeleteLoginLogsButtonState();
+    });
+
+    btnDeleteSelected.onclick = async () => {
+        const checkedBoxes = document.querySelectorAll('.login-log-checkbox:checked');
+        if (checkedBoxes.length === 0) return;
+        if (confirm(`Deseja apagar os ${checkedBoxes.length} registros de acesso selecionados?`)) {
+            const idsToDelete = new Set(Array.from(checkedBoxes).map(cb => cb.dataset.id));
+            state.loginLog = state.loginLog.filter(log => !idsToDelete.has(log.id));
+            await save(state);
+            renderLoginLogs();
+            updateDeleteLoginLogsButtonState();
+            selectAllLoginLogs.checked = false;
+        }
+    };
     
-    if(btnClearLogs) {
-        btnClearLogs.onclick = async () => {
-            if (confirm('ATENÇÃO: Esta ação é irreversível e apagará TODOS os registros de atividades de TODOS os estagiários e do sistema. Deseja continuar?')) {
-                (state.interns || []).forEach(intern => {
-                    intern.auditLog = [];
-                });
-                state.systemLog = [];
-                await save(state);
-                alert('Todos os logs foram limpos.');
-                renderSystemLogs();
-            }
-        };
-    }
+    btnClearAll.onclick = async () => {
+        if (confirm('ATENÇÃO: Deseja apagar TODO o histórico de acessos? Esta ação é irreversível.')) {
+            state.loginLog = [];
+            await save(state);
+            alert('Histórico de acesso limpo.');
+            renderLoginLogs();
+            updateDeleteLoginLogsButtonState();
+            selectAllLoginLogs.checked = false;
+        }
+    };
 }
