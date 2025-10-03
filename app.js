@@ -150,7 +150,17 @@ async function initApp() {
 // Funções de busca globais
 function findUserByIntern(internId) { return state.users.find(u => u.internId === internId); }
 function findInternById(id) { return (state.interns || []).find(i => i.id === id); }
-function hasPower(user, power) { if (!user) return false; if (user.role === 'super') return true; return !!(user.powers && user.powers[power]); }
+function hasPower(user, power) {
+    if (!user) return false;
+    if (user.role === 'super') return true;
+
+    // NOVO: Lógica para checar poderes delegados
+    if (user.delegatedAdmin?.enabled && session.viewMode === 'admin') {
+        return !!(user.delegatedAdmin.powers && user.delegatedAdmin.powers[power]);
+    }
+
+    return !!(user.powers && user.powers[power]);
+}
 
 // Função de logout acessível globalmente
 window.logout = () => {
@@ -165,14 +175,29 @@ function render() {
         root.innerHTML = '<h2>Carregando...</h2>';
         return;
     }
-    if (!session) return renderLogin();
+    if (!session) {
+        return renderLogin();
+    }
     const user = (state.users || []).find(u => u.id === session.userId);
     if (!user) {
         window.logout();
         return;
     }
-    if (user.role === 'intern') return renderIntern(user);
-    return renderManager(user);
+
+    // LÓGICA DE RENDERIZAÇÃO CORRIGIDA
+    if (user.role === 'intern') {
+        // Se for estagiário, verifica se ele deve ver a tela de admin delegado
+        if (user.delegatedAdmin?.enabled && session.viewMode === 'admin') {
+            renderManager(user, true); // O 'true' indica que é uma visão delegada
+        } else {
+            // Caso contrário, mostra a tela normal de estagiário
+            session.viewMode = 'intern'; // Garante que o modo de visão está correto
+            renderIntern(user);
+        }
+    } else {
+        // Se for admin ou super, mostra a tela de gestão
+        renderManager(user);
+    }
 }
 
 // ----------------- TELA DE LOGIN -----------------
