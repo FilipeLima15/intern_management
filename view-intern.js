@@ -4,7 +4,7 @@ import { escapeHtml, nowISO, uuid, timestamp } from './utils.js';
 import { showModal, showProvaBloqueadaModal } from './ui-modals.js';
 
 // Importa funções e variáveis compartilhadas do app principal
-import { state, session, save, render, findInternById, downloadBlob, hasPower } from './app.js';
+import { state, session, save, render, findInternById, findUserByIntern, downloadBlob, hasPower } from './app.js';
 
 // ------------- Funções movidas de app.js ---------------
 
@@ -46,7 +46,6 @@ export function renderIntern(user) {
         ? `<div class="total-pill"><div class="small-muted">Banco de horas</div><div class="num">${formatHours(totals.net)} h</div></div>`
         : `<div class="total-pill"><div class="small-muted">Horas negativas</div><div class="num" style="color:var(--danger)">${formatHours(Math.abs(totals.net))} h</div></div>`;
     
-    // NOVO: Lógica para calcular e criar o quadro de período de bloqueio
     const blockDays = state.meta.provaBlockDays || 0;
     const today = new Date();
     const lastBlockedDate = new Date();
@@ -60,7 +59,6 @@ export function renderIntern(user) {
         </div>
     `;
 
-    // NOVO: Lógica para criar os botões de troca de perfil (se aplicável)
     let profileSwitcherHtml = '';
     if (user.delegatedAdmin?.enabled) {
         profileSwitcherHtml = `
@@ -126,12 +124,11 @@ export function renderIntern(user) {
   `;
     root.appendChild(card);
 
-    // NOVO: Adiciona o listener para o botão de troca de perfil, se ele existir
     const btnSwitchToAdmin = document.getElementById('btnSwitchToAdmin');
     if (btnSwitchToAdmin) {
         btnSwitchToAdmin.addEventListener('click', () => {
-            session.viewMode = 'admin'; // Define o modo de visualização
-            render(); // Re-renderiza a aplicação
+            session.viewMode = 'admin';
+            render();
         });
     }
 
@@ -144,7 +141,6 @@ export function renderIntern(user) {
         const blockDays = Number(state.meta.provaBlockDays || 0);
         const today = new Date(); today.setHours(0, 0, 0, 0);
 
-        // CORREÇÃO: Removido o "+ 1" extra que causava o bloqueio de um dia a mais.
         const allowedFrom = new Date(today.getTime() + blockDays * 24 * 60 * 60 * 1000);
 
         const selected = new Date(d + 'T00:00:00');
@@ -619,7 +615,7 @@ export function showRegistrationDataModal(intern, user, options = {}) {
                     <textarea id="address" rows="3">${escapeHtml(dataToRender.address)}</textarea>
                 </div>
                  <div class="form-row">
-                    <label id="label-instEmail" for="instEmail"><strong>E-mail institucional</strong></label>
+                    <label id="label-instEmail" for="instEmail"><strong>E-mail institucional (se souber)</strong></label>
                     <input id="instEmail" type="email" value="${escapeHtml(dataToRender.instEmail)}">
                 </div>
             </fieldset>
@@ -627,8 +623,8 @@ export function showRegistrationDataModal(intern, user, options = {}) {
             <fieldset style="border:1px solid #eee; border-radius:8px; padding:12px; margin-bottom:12px;">
                 <legend style="font-weight:bold; color:var(--accent);">Estágio</legend>
                 <div class="form-row">
-                    <label id="label-enrollmentId" for="enrollmentId"><strong>Matrícula</strong></label>
-                    <input id="enrollmentId" value="${escapeHtml(user.username)}" disabled>
+                    <label id="label-enrollmentId" for="enrollmentId"><strong>Matrícula (login) *</strong></label>
+                    <input id="enrollmentId" value="${escapeHtml(dataToRender.enrollmentId || user.username)}">
                 </div>
                 <div class="form-row">
                     <label id="label-internshipHours" for="internshipHours"><strong>Horário de estágio *</strong></label>
@@ -712,15 +708,19 @@ export function showRegistrationDataModal(intern, user, options = {}) {
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
 
+        let isValid = true;
+        m.modal.querySelectorAll('label').forEach(label => label.style.color = '');
+        m.modal.querySelector('#error-message').style.display = 'none';
+
+        // --- INÍCIO DA CORREÇÃO ---
+        // A validação de campos obrigatórios agora só roda para o estagiário
         if (!options.isAdminView) {
             const mandatoryFields = [
-                'fullName', 'cpf', 'birthDate', 'mainPhone', 'address', 'internshipHours',
+                'fullName', 'cpf', 'birthDate', 'mainPhone', 'address', 'enrollmentId', 'internshipHours',
                 'emergencyContactName', 'emergencyContactRelation', 'emergencyContactPhone',
                 'university', 'currentSemester'
             ];
-            let isValid = true;
-            m.modal.querySelectorAll('label').forEach(label => label.style.color = '');
-            m.modal.querySelector('#error-message').style.display = 'none';
+            
             mandatoryFields.forEach(id => {
                 const input = m.modal.querySelector(`#${id}`);
                 if (!input.value.trim()) {
@@ -728,15 +728,51 @@ export function showRegistrationDataModal(intern, user, options = {}) {
                     isValid = false;
                 }
             });
+    
             if (universitySelect.value === 'outros' && !m.modal.querySelector('#universityOther').value.trim()) {
                 m.modal.querySelector(`#label-universityOther`).style.color = 'var(--danger)';
                 isValid = false;
             }
-            if (!isValid) {
-                m.modal.querySelector('#error-message').style.display = 'block';
+        }
+        // --- FIM DA CORREÇÃO ---
+
+        // Validações de formato e unicidade da matrícula (para ambos, admin e estagiário)
+        const newEnrollmentId = m.modal.querySelector('#enrollmentId').value.trim();
+        // A matrícula é obrigatória para o estagiário, mas o admin pode deixar em branco se quiser
+        if (newEnrollmentId === '' && !options.isAdminView) {
+            m.modal.querySelector('#label-enrollmentId').style.color = 'var(--danger)';
+            isValid = false;
+        }
+
+        if (newEnrollmentId && !/^[et]\d{6}$/i.test(newEnrollmentId) && !newEnrollmentId.startsWith('temp_')) {
+            alert("Formato de matrícula inválido. Use a letra 'e' ou 't' seguida por 6 números.");
+            m.modal.querySelector('#label-enrollmentId').style.color = 'var(--danger)';
+            isValid = false;
+        }
+
+        if (!isValid) {
+            m.modal.querySelector('#error-message').style.display = 'block';
+            return;
+        }
+
+        const userToUpdate = findUserByIntern(intern.id);
+        if (!userToUpdate) {
+            alert('Erro: não foi possível encontrar o perfil de usuário associado a este estagiário.');
+            return;
+        }
+
+        // Verifica se a nova matrícula já está em uso
+        if (newEnrollmentId) {
+            const existingUser = state.users.find(u => u.username.toLowerCase() === newEnrollmentId.toLowerCase());
+            if (existingUser && existingUser.id !== userToUpdate.id) {
+                alert('Erro: Esta matrícula já está em uso por outro usuário.');
+                m.modal.querySelector('#label-enrollmentId').style.color = 'var(--danger)';
                 return;
             }
+            userToUpdate.username = newEnrollmentId;
         }
+        
+        userToUpdate.name = m.modal.querySelector('#fullName').value;
 
         intern.registrationData = {
             fullName: m.modal.querySelector('#fullName').value,
@@ -746,7 +782,7 @@ export function showRegistrationDataModal(intern, user, options = {}) {
             altPhone: m.modal.querySelector('#altPhone').value,
             address: m.modal.querySelector('#address').value,
             instEmail: m.modal.querySelector('#instEmail').value,
-            enrollmentId: m.modal.querySelector('#enrollmentId').value,
+            enrollmentId: newEnrollmentId,
             internshipHours: m.modal.querySelector('#internshipHours').value,
             internshipStartDate: m.modal.querySelector('#internshipStartDate').value,
             emergencyContactName: m.modal.querySelector('#emergencyContactName').value,
@@ -756,10 +792,9 @@ export function showRegistrationDataModal(intern, user, options = {}) {
             university: universitySelect.value,
             universityOther: m.modal.querySelector('#universityOther').value,
             currentSemester: m.modal.querySelector('#currentSemester').value,
-            // LÓGICA CONDICIONAL: SÓ ATUALIZA O TIMESTAMP SE NÃO FOR ADMIN
             lastUpdatedAt: options.isAdminView 
-                ? intern.registrationData.lastUpdatedAt // Mantém o timestamp antigo se o admin estiver editando
-                : new Date().toISOString() // Cria um novo timestamp se o estagiário estiver editando
+                ? intern.registrationData.lastUpdatedAt
+                : new Date().toISOString()
         };
         
         await save(state);
@@ -767,8 +802,7 @@ export function showRegistrationDataModal(intern, user, options = {}) {
         m.close();
         m.cleanup();
         
-        if (options.isForcedUpdate) {
-            render();
-        }
+        // Re-renderiza a tela para refletir as mudanças
+        render();
     });
 }
