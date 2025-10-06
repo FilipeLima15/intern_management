@@ -137,6 +137,9 @@ export function showPreRegistrationModal() {
     </div>
     <form id="formPreReg" style="margin-top:10px;display:flex;flex-direction:column;gap:10px">
       <label><span class="small-muted">Tipo</span><input value="Estagiário" disabled class="input" /></label>
+      <label><span class="small-muted">Subtipo</span>
+        <select id="preRegSubType"><option value="sessao">Sessão</option><option value="administrativo">Administrativo</option></select>
+      </label>
       <label><span class="small-muted">Nome completo do estagiário</span><input id="preRegName" required/></label>
       
       <label><span class="small-muted">Quero me cadastrar com</span>
@@ -203,6 +206,7 @@ export function showPreRegistrationModal() {
         const name = m.modal.querySelector('#preRegName').value.trim();
         const identifier = userInput.value.trim();
         const identifierType = idTypeSelect.value;
+        const subType = m.modal.querySelector('#preRegSubType').value;
         const pass = m.modal.querySelector('#preRegPass').value;
         const passConfirm = m.modal.querySelector('#preRegPassConfirm').value;
 
@@ -227,6 +231,7 @@ export function showPreRegistrationModal() {
             name,
             identifier: identifier,
             identifierType: identifierType,
+            subType: subType,
             password: pass,
             createdAt: timestamp(),
             status: 'pending'
