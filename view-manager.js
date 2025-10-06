@@ -22,6 +22,7 @@ import { showHourEntryForm, markCompensated, showRegistrationDataModal } from '.
 // Variáveis de estado específicas deste módulo
 let adminCalendarViewing = new Date();
 let adminProvasView = 'list';
+let provasSubTypeFilter = 'all'; 
 let importedUserData = [];
 let userFilter = 'all';
 
@@ -149,13 +150,20 @@ const backToInternButton = `
       </div>
       <div id="provas" class="content-section">
           <div class="card">
-              <div style="display: flex; justify-content: space-between; align-items: center;">
+              <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
                 <h3>Folgas-prova</h3>
                 <div style="display: flex; gap: 8px;">
                     <button id="toggleProvasListView" class="button">Lista</button>
                     <button id="toggleProvasCalendarView" class="button ghost">Calendário</button>
                 </div>
               </div>
+
+              <div id="provasFilterButtons" class="filter-button-group" style="margin-top: 12px;">
+                  <button class="button" data-filter="all">Todos</button>
+                  <button class="button ghost" data-filter="administrativo">Administrativo</button>
+                  <button class="button ghost" data-filter="sessao">Sessão</button>
+              </div>
+
               <div id="provasListSection" style="margin-top: 12px;" class="content-section active">
                   <div class="muted small">Exibe apenas estagiários que têm folga-prova cadastrada na data escolhida.</div>
                   <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
@@ -280,6 +288,17 @@ const backToInternButton = `
         });
     });
     
+    document.querySelectorAll('#provasFilterButtons button').forEach(button => {
+        button.addEventListener('click', (e) => {
+            provasSubTypeFilter = e.currentTarget.dataset.filter;
+            document.querySelectorAll('#provasFilterButtons button').forEach(btn => {
+                btn.classList.add('ghost');
+            });
+            e.currentTarget.classList.remove('ghost');
+            renderProvasSection(); 
+        });
+    });
+
     const selectAllCheckbox = document.getElementById('selectAllUsersCheckbox');
     if (selectAllCheckbox) {
         selectAllCheckbox.addEventListener('change', (e) => {
@@ -510,6 +529,7 @@ async function importDataFromFile(file) {
     r.readAsText(file);
 }
 
+// ALTERADO: Função inteira atualizada
 function showBulkImportModal() {
     const html = `
         <div style="display:flex;justify-content:space-between;align-items:center">
@@ -521,12 +541,13 @@ function showBulkImportModal() {
         </div>
         <div class="card" style="margin-top:10px; padding: 15px; background: var(--input-bg); border: 1px dashed var(--input-border);">
             <h4>Formato da Planilha:</h4>
-            <div class="muted small">A planilha deve conter 4 colunas na primeira aba, com a primeira linha sendo o cabeçalho:</div>
+            <div class="muted small">A planilha deve conter 5 colunas na primeira aba, com a primeira linha sendo o cabeçalho:</div>
             <ul style="list-style-type: disc; padding-left: 20px; font-size: 14px;">
                 <li><strong>Coluna A: Nome completo</strong></li>
                 <li><strong>Coluna B: Usuário</strong> (Matrícula, ex: e710856 ou t320239)</li>
                 <li><strong>Coluna C: Senha</strong> (Se vazia, será '123456')</li>
                 <li><strong>Coluna D: Permitir alteração de senha (Sim/Não)</strong></li>
+                <li><strong>Coluna E: Subtipo</strong> (Administrativo ou Sessão. Se vazia, será 'Sessão')</li>
             </ul>
             <div class="form-check" style="margin-top: 10px;">
                 <input type="checkbox" id="userTypeBulk" checked disabled>
@@ -536,6 +557,7 @@ function showBulkImportModal() {
 
         <div style="display:flex; gap: 10px; margin-top: 15px; align-items:center;">
             <button id="btnTriggerFile" class="button alt" style="min-width: 150px;">Carregar Planilha (.xlsx/.csv)</button>
+            <a href="https://tjdf.sharepoint.com/:x:/r/sites/eCEJUSC3/Pasta%20de%20rede/02%20Administrativo/09.%20Modelos/01.%20Sistema%20prova/Criar%20usu%C3%A1rio%20em%20lote.xlsx?d=w48848cfaef3441a8817ca3989e827228&csf=1&web=1&e=aorA0B" target="_blank" class="button ghost">Download modelo</a>
             <span id="fileNameDisplay" class="small-muted" style="flex-grow: 1;">Nenhum arquivo carregado.</span>
         </div>
         
@@ -583,7 +605,7 @@ function showBulkImportModal() {
         const creationDate = timestamp();
         for (const userData of importedUserData) {
             const internId = uuid();
-            (state.interns || []).push({ id: internId, name: userData.name, dates: [], hoursEntries: [], auditLog: [], registrationData: { enrollmentId: userData.username, cpf: '' } });
+            (state.interns || []).push({ id: internId, name: userData.name, subType: userData.subType, dates: [], hoursEntries: [], auditLog: [], registrationData: { enrollmentId: userData.username, cpf: '' } });
             (state.users || []).push({ id: uuid(), username: userData.username, name: userData.name, password: userData.password, role:'intern', internId, powers: defaultPowersFor('intern'), selfPasswordChange: userData.allowSelfPwd, createdAt: creationDate });
         }
         await save(state);
@@ -592,6 +614,7 @@ function showBulkImportModal() {
     };
 }
 
+// ALTERADO: Função atualizada para ler a nova coluna E (subtipo)
 function validateExcelData(sheetData) {
     const validUsers = [];
     const existingUsernames = new Set((state.users || []).map(u => u.username.toLowerCase()));
@@ -603,12 +626,15 @@ function validateExcelData(sheetData) {
         const password = String(row[2] || '').trim() || '123456';
         const allowSelfPwdText = String(row[3] || '').trim().toLowerCase();
         const allowSelfPwd = allowSelfPwdText === 'sim';
+        const subTypeRaw = String(row[4] || '').trim().toLowerCase();
+        const subType = subTypeRaw === 'administrativo' ? 'administrativo' : 'sessao'; // Padrão é 'sessao'
+        
         const isMatriculaValid = /^[et]\d{6}$/i.test(username);
         if (!name || !username || !isMatriculaValid || existingUsernames.has(username)) {
             console.warn(`Linha ${index + 2} ignorada: dados inválidos ou usuário já existente.`);
             return;
         }
-        validUsers.push({ name, username, password, allowSelfPwd });
+        validUsers.push({ name, username, password, allowSelfPwd, subType });
         existingUsernames.add(username);
     });
     return validUsers;
@@ -658,7 +684,7 @@ async function approveRegistration(regId) {
         registrationData = { cpf: '', enrollmentId: reg.identifier };
     }
     
-    const newIntern = { id: internId, name: reg.name, dates: [], hoursEntries: [], auditLog: [], registrationData };
+    const newIntern = { id: internId, name: reg.name, subType: reg.subType || 'sessao', dates: [], hoursEntries: [], auditLog: [], registrationData };
     (state.interns || []).push(newIntern);
 
     (state.users || []).push({ id: uuid(), username: newUsername, name: reg.name, password: reg.password, role: 'intern', internId, powers: defaultPowersFor('intern'), selfPasswordChange: true, createdAt: timestamp() });
@@ -851,8 +877,14 @@ function renderAdminProvasCalendar() {
     for (let i = 0; i < firstDay; i++) {
         grid.appendChild(document.createElement('div'));
     }
+    
+    let filteredInterns = state.interns || [];
+    if (provasSubTypeFilter !== 'all') {
+        filteredInterns = filteredInterns.filter(i => (i.subType || 'sessao') === provasSubTypeFilter);
+    }
+
     const provasByDate = {};
-    (state.interns || []).forEach(intern => {
+    (filteredInterns).forEach(intern => {
         (intern.dates || []).forEach(p => {
             if (!provasByDate[p.date]) provasByDate[p.date] = [];
             provasByDate[p.date].push(intern);
@@ -978,7 +1010,14 @@ function renderUsersList() {
         const delegatedIndicator = u.delegatedAdmin?.enabled ? '🧑‍💼 ' : '';
         const displayName = u.role === 'intern' ? `${delegatedIndicator}${escapeHtml(internName)} (${escapeHtml(u.username)})` : `${escapeHtml(u.name || u.username)}`;
         
-        const roleText = u.role === 'intern' ? 'Estagiário' : u.role;
+        let roleText = u.role === 'intern' ? 'Estagiário' : u.role;
+        if (u.role === 'intern') {
+            const intern = findInternById(u.internId);
+            if (intern && intern.subType) {
+                const subTypeDisplay = intern.subType === 'administrativo' ? 'Administrativo' : 'Sessão';
+                roleText += ` • ${subTypeDisplay}`;
+            }
+        }
         const roleAndDateDisplay = `${roleText} (${formatDate(u.createdAt)})`;
         const checkboxHtml = canDelete ? `<input type="checkbox" data-user-id="${u.id}" class="user-select-checkbox" />` : '<div class="icon-placeholder"></div>';
         const left = `<div><div style="font-weight:700">${displayName}</div><div class="muted small">${roleAndDateDisplay}</div></div>`;
@@ -1382,6 +1421,9 @@ function showCreateUserForm(currentManager){
     <form id="formCreate" style="margin-top:10px;display:flex;flex-direction:column;gap:10px">
       <label><span class="small-muted">Tipo</span><select id="newType"><option value="intern">Estagiário</option><option value="admin">Admin secundário</option></select></label>
       <div id="internFields">
+        <label><span class="small-muted">Subtipo</span>
+          <select id="newSubType"><option value="sessao">Sessão</option><option value="administrativo">Administrativo</option></select>
+        </label>
         <label><span class="small-muted">Criar com</span>
           <select id="newIdType"><option value="matricula">Matrícula</option><option value="cpf">CPF</option></select>
         </label>
@@ -1479,6 +1521,7 @@ function showCreateUserForm(currentManager){
 
     if(type==='intern'){
       const idType = idTypeSelect.value;
+      const subType = m.modal.querySelector('#newSubType').value;
       let newUsername, registrationData;
 
       if (idType === 'cpf') {
@@ -1496,7 +1539,7 @@ function showCreateUserForm(currentManager){
       }
 
       const id = uuid();
-      const newIntern = { id, name, dates: [], hoursEntries: [], auditLog: [], registrationData };
+      const newIntern = { id, name, subType, dates: [], hoursEntries: [], auditLog: [], registrationData };
       (state.interns || []).push(newIntern);
       (state.users || []).push({ id: uuid(), username: newUsername, name, password: pass, role:'intern', internId: id, powers: defaultPowersFor('intern'), selfPasswordChange: allowSelf, createdAt: creationDate });
       newIntern.auditLog.push({ id: uuid(), action: 'create_user', byUserId: manager.id, byUserName: manager.username, at: creationDate, details: `Criou o perfil de estagiário '${name}' com ${idType}: ${identifier}.` });
@@ -1530,6 +1573,19 @@ function showEditUserForm(userId){
   const intern = u.internId ? findInternById(u.internId) : null;
   const isIntern = u.role === 'intern';
   const canEditPowers = currentManager.role === 'super' && !isIntern;
+
+  let subTypeHtml = '';
+    if (isIntern) {
+        const currentSubType = intern?.subType || 'sessao'; 
+        subTypeHtml = `
+        <label><span class="small-muted">Subtipo</span>
+            <select id="editSubType">
+                <option value="sessao" ${currentSubType === 'sessao' ? 'selected' : ''}>Sessão</option>
+                <option value="administrativo" ${currentSubType === 'administrativo' ? 'selected' : ''}>Administrativo</option>
+            </select>
+        </label>`;
+    }
+  
   let powersHtml = '';
   if (!isIntern) {
       powersHtml = `
@@ -1551,6 +1607,7 @@ function showEditUserForm(userId){
     <form id="formEdit" style="margin-top:10px;display:flex;flex-direction:column;gap:10px">
       <label><span class="small-muted">Nome completo</span><input id="editName" value="${escapeHtml(isIntern ? intern?.name || '' : u.name || '')}" required/></label>
       <label><span class="small-muted">Usuário</span><input id="editUser" value="${escapeHtml(u.username)}" required/></label>
+      ${subTypeHtml}
       <label><input type="checkbox" id="editAllowSelf" ${u.selfPasswordChange ? 'checked' : ''}/> Permitir auto-alteração de senha</label>
       ${powersHtml}
       <div style="display:flex;gap:8px;justify-content:flex-end">
@@ -1569,6 +1626,7 @@ function showEditUserForm(userId){
     u.name = newName;
     if(isIntern && intern){
       intern.name = newName;
+      intern.subType = m.modal.querySelector('#editSubType').value;
     }
     u.selfPasswordChange = !!m.modal.querySelector('#editAllowSelf').checked;
     if (canEditPowers) {
@@ -1595,7 +1653,13 @@ function filterAndRenderProvas(){
   const area = document.getElementById('provasResults'); if(!area) return;
   area.innerHTML='';
   if(!date){ area.innerHTML = '<div class="muted">Escolha uma data para filtrar</div>'; return; }
-  const matched = (state.interns || []).filter(i=> (i.dates || []).some(p => p.date === date) );
+  
+  let filteredInterns = state.interns || [];
+    if (provasSubTypeFilter !== 'all') {
+        filteredInterns = filteredInterns.filter(i => (i.subType || 'sessao') === provasSubTypeFilter);
+    }
+
+  const matched = filteredInterns.filter(i=> (i.dates || []).some(p => p.date === date) );
   if(matched.length===0){ area.innerHTML = '<div class="muted">Nenhum estagiário com folga-prova nesta data</div>'; return; }
   matched.sort((a,b)=>a.name.localeCompare(b.name,'pt-BR')).forEach(it=>{
     const row = document.createElement('div'); row.className='row';
@@ -1682,7 +1746,6 @@ function renderLoginLogs(searchQuery = '', filterDate = '') {
 
     let logs = (state.loginLog || []).slice();
 
-    // Aplicar filtros
     if (searchQuery) {
         logs = logs.filter(log =>
             (log.name || '').toLowerCase().includes(searchQuery) ||
@@ -1694,7 +1757,6 @@ function renderLoginLogs(searchQuery = '', filterDate = '') {
         logs = logs.filter(log => log.at && log.at.startsWith(filterDate));
     }
 
-    // Ordenar após filtrar
     logs.sort((a, b) => new Date(b.at) - new Date(a.at));
 
     if (logs.length === 0) {
@@ -1731,7 +1793,6 @@ function updateDeleteLoginLogsButtonState() {
 
 
 function renderSystemLogs() {
-    // Lógica das abas
     document.querySelectorAll('.tab-button').forEach(button => {
         button.addEventListener('click', () => {
             const tabId = button.dataset.tab;
@@ -1743,9 +1804,8 @@ function renderSystemLogs() {
     });
 
     renderActivityLogs();
-    renderLoginLogs(); // Renderiza a nova aba
+    renderLoginLogs(); 
 
-    // Listeners para os controles de logs de ATIVIDADE
     const btnApply = document.getElementById('btnApplyLogFilter');
     const btnClearFilter = document.getElementById('btnClearLogFilter');
     const btnClearLogs = document.getElementById('btnClearActivityLogs');
@@ -1768,7 +1828,6 @@ function renderSystemLogs() {
         }
     };
 
-    // Listeners para os filtros e controles de logs de ACESSO (LOGIN)
     const searchInput = document.getElementById('loginLogSearchInput');
     const dateInput = document.getElementById('loginLogDateInput');
     const btnClearLoginFilter = document.getElementById('btnClearLoginLogFilter');
@@ -1785,7 +1844,7 @@ function renderSystemLogs() {
     btnClearLoginFilter.addEventListener('click', () => {
         searchInput.value = '';
         dateInput.value = '';
-        applyLoginFilters(); // Re-renderiza a lista completa
+        applyLoginFilters(); 
     });
 
     const selectAllLoginLogs = document.getElementById('selectAllLoginLogs');
