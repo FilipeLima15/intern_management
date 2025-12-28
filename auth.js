@@ -1,12 +1,12 @@
 // auth.js
-// Gerencia Login, Logout e Recuperação de Senha
+// Gerencia Login, Logout, Recuperação de Senha e Redirecionamento
 
 import { auth } from "./firebase-config.js";
 import { 
     signInWithEmailAndPassword, 
     signOut, 
     onAuthStateChanged,
-    sendPasswordResetEmail // <--- IMPORTANTE: Nova importação
+    sendPasswordResetEmail 
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
 // Elementos da Interface
@@ -19,21 +19,23 @@ const emailInput = document.getElementById('loginEmail');
 const passInput = document.getElementById('loginPass');
 const loginBtn = document.getElementById('btnLogin');
 const loginError = document.getElementById('loginError');
-const forgotPassBtn = document.getElementById('forgotPassBtn'); // <--- Novo seletor
+const forgotPassBtn = document.getElementById('forgotPassBtn');
 
 // Variável para guardar o usuário atual
 let currentUser = null;
 
-// === MONITORAMENTO DE ESTADO ===
+// === 1. MONITORAMENTO DE ESTADO ===
 onAuthStateChanged(auth, (user) => {
     
+    // Remove o Loader
     if (loadingOverlay) loadingOverlay.style.display = 'none';
 
     if (user) {
-        // USUÁRIO CONECTADO
+        // --- USUÁRIO CONECTADO ---
         currentUser = user;
         console.log("Usuário conectado:", user.email);
         
+        // Esconde telas de login/capa e mostra o sistema
         if (landingPage) landingPage.style.display = 'none';
         if (loginModal) {
             loginModal.classList.remove('active');
@@ -41,25 +43,28 @@ onAuthStateChanged(auth, (user) => {
         }
         if (appContent) appContent.style.display = 'flex'; 
         
+        // Avisa outros scripts que o login terminou
         window.dispatchEvent(new CustomEvent('auth-ready', { detail: user }));
     } else {
-        // USUÁRIO DESCONECTADO
+        // --- USUÁRIO DESCONECTADO ---
         currentUser = null;
         console.log("Usuário desconectado");
         
+        // Esconde o sistema
         if (appContent) appContent.style.display = 'none';
         
+        // Lógica de Redirecionamento (Versão Raiz)
         if (landingPage) {
-            landingPage.style.display = 'flex';
+            // Se estamos na index.html, mostra a capa
+            landingPage.style.display = 'flex'; 
         } else {
-            const inSubfolder = window.location.pathname.includes('/outros/');
-            const targetPage = inSubfolder ? 'index.html' : 'outros/index.html';
-            window.location.href = targetPage;
+            // Se estamos em páginas internas (home, cronograma, etc), chuta para o login
+            window.location.href = 'index.html';
         }
     }
 });
 
-// === AÇÃO DE LOGIN ===
+// === 2. AÇÃO DE LOGIN ===
 if (loginBtn) {
     loginBtn.addEventListener('click', async () => {
         const email = emailInput.value;
@@ -70,15 +75,18 @@ if (loginBtn) {
             return;
         }
 
-        loginError.textContent = ""; // Limpa erros anteriores
+        loginError.textContent = ""; 
         const originalBtnText = loginBtn.innerHTML;
         loginBtn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Verificando...';
         
         try {
             await signInWithEmailAndPassword(auth, email, pass);
+            // Sucesso: O onAuthStateChanged vai redirecionar a tela
         } catch (error) {
             loginBtn.innerHTML = originalBtnText;
             console.error("Erro login:", error);
+            
+            // Tratamento de erros comuns
             if(error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
                 loginError.textContent = "E-mail ou senha incorretos.";
             } else if (error.code === 'auth/too-many-requests') {
@@ -90,30 +98,24 @@ if (loginBtn) {
     });
 }
 
-// === NOVA FUNÇÃO: RECUPERAR SENHA ===
+// === 3. RECUPERAR SENHA ===
 if (forgotPassBtn) {
     forgotPassBtn.addEventListener('click', async (e) => {
         e.preventDefault();
 
-        // 1. Tenta pegar o email do campo de input, se estiver vazio, pede via prompt
+        // Pega o email digitado ou pede num prompt
         let email = emailInput.value.trim();
         
         if (!email) {
             email = prompt("Por favor, digite seu e-mail para redefinir a senha:");
         }
 
-        if (!email) return; // Se a pessoa cancelou ou não digitou nada
+        if (!email) return;
 
         try {
-            // 2. Envia o email usando Firebase
             await sendPasswordResetEmail(auth, email);
-            
-            // 3. Feedback visual
             alert(`Um e-mail de redefinição de senha foi enviado para: ${email}.\n\nVerifique sua caixa de entrada (e spam).`);
-            
-            // Opcional: Limpar erro se houver
             if(loginError) loginError.textContent = "";
-            
         } catch (error) {
             console.error("Erro reset senha:", error);
             if (error.code === 'auth/user-not-found') {
@@ -127,8 +129,9 @@ if (forgotPassBtn) {
     });
 }
 
-// === AÇÃO DE LOGOUT ===
+// === 4. AÇÃO DE LOGOUT (Delegação de Eventos) ===
 document.addEventListener('click', (e) => {
+    // Procura o botão de logout mesmo que criado dinamicamente
     const btn = e.target.closest('#btnLogout');
     
     if (btn) {
@@ -136,6 +139,7 @@ document.addEventListener('click', (e) => {
         if(confirm("Deseja realmente sair?")) {
             signOut(auth).then(() => {
                 console.log("Deslogado com sucesso.");
+                // O onAuthStateChanged vai cuidar do redirecionamento
             }).catch((error) => {
                 console.error("Erro ao sair:", error);
             });
@@ -143,7 +147,7 @@ document.addEventListener('click', (e) => {
     }
 });
 
-// === ATALHO: ENTER PARA LOGAR ===
+// === 5. ATALHO: ENTER PARA LOGAR ===
 if (passInput && loginBtn) {
     passInput.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') loginBtn.click();
