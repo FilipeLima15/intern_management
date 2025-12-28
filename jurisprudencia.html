@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jurisprudência - Sistema de Estudos</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="outros/styles.css">
+    <style>
+        /* --- ESTILOS GERAIS DO CARD (EFEITO 3D/BISEL MODERNO) --- */
+        .info-card {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            background: linear-gradient(145deg, #ffffff, #f8fafc);
+            position: relative; overflow: hidden;
+            border-top: 1px solid rgba(255, 255, 255, 0.8); border-left: 1px solid rgba(255, 255, 255, 0.8);
+            border-bottom: 1px solid rgba(226, 232, 240, 0.6); border-right: 1px solid rgba(226, 232, 240, 0.6);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 10px 15px -3px rgba(0, 0, 0, 0.03), inset 0 1px 2px rgba(255, 255, 255, 0.6);
+        }
+        .info-card:hover {
+            transform: translateY(-5px) scale(1.01); z-index: 10;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.08), 0 10px 10px -5px rgba(0, 0, 0, 0.04), inset 0 1px 1px rgba(255, 255, 255, 0.9);
+        }
+        .card-header-bar {
+            background-color: rgba(248, 250, 252, 0.7); padding: 0.6rem; text-align: center;
+            box-shadow: inset 0 -2px 4px rgba(0, 0, 0, 0.02), inset 0 1px 2px rgba(255, 255, 255, 0.5);
+            border-bottom: 1px solid rgba(241, 245, 249, 0.8); backdrop-filter: blur(5px);
+        }
+        .card-action-btn {
+            position: absolute; right: 8px; width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; opacity: 0; transition: all 0.2s ease-in-out; z-index: 20; cursor: pointer; color: #94a3b8; background: rgba(255, 255, 255, 0.8); box-shadow: 0 2px 4px rgba(0,0,0,0.05); backdrop-filter: blur(4px);
+        }
+        .info-card:hover .card-action-btn { opacity: 1; }
+        .btn-delete-card { top: 8px; } .btn-delete-card:hover { background: #fee2e2; color: #ef4444; transform: scale(1.1); box-shadow: 0 4px 6px rgba(239, 68, 68, 0.2); }
+        .btn-reset-card { top: 38px; } .btn-reset-card:hover { background: #e2e8f0; color: #334155; transform: rotate(-180deg) scale(1.1); box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+
+        /* --- ESTILOS DE REVISÃO --- */
+        .rev-container-modern {
+            background-color: #f1f5f9; border-radius: 9999px; padding: 0.35rem; display: inline-flex; gap: 0.35rem;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.06), inset 0 1px 2px rgba(255,255,255,0.5); border-bottom: 1px solid rgba(255,255,255,0.8);
+        }
+        .rev-btn {
+            width: 34px; height: 34px; border-radius: 50%; background: linear-gradient(145deg, #ffffff, #f1f5f9);
+            color: #64748b; font-weight: 700; font-size: 0.9rem; display: flex; align-items: center; justify-content: center;
+            cursor: pointer; transition: all 0.2s; position: relative; border: 1px solid #e2e8f0;
+            box-shadow: 0 2px 3px rgba(0,0,0,0.05), inset 0 1px 2px rgba(255,255,255,1);
+        }
+        .rev-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 5px rgba(0,0,0,0.08), inset 0 1px 2px rgba(255,255,255,1); color: #0f172a; }
+        .rev-btn:active { transform: translateY(1px); box-shadow: inset 0 2px 4px rgba(0,0,0,0.1); }
+
+        /* PALETA MONOCROMÁTICA (ATIVOS) */
+        .btn-rev-active-1 { background: linear-gradient(145deg, #f1f5f9, #e2e8f0) !important; color: #334155 !important; border-color: #cbd5e1 !important; box-shadow: inset 0 1px 3px rgba(0,0,0,0.1) !important;}
+        .btn-rev-active-2 { background: linear-gradient(145deg, #e0f2fe, #bae6fd) !important; color: #0284c7 !important; border-color: #7dd3fc !important; box-shadow: inset 0 1px 3px rgba(2, 132, 199, 0.2) !important; }
+        .btn-rev-active-3 { background: linear-gradient(145deg, #dbeafe, #93c5fd) !important; color: #1d4ed8 !important; border-color: #60a5fa !important; box-shadow: inset 0 1px 3px rgba(29, 78, 216, 0.2) !important; }
+        .btn-rev-active-custom { background: linear-gradient(145deg, #e0e7ff, #a5b4fc) !important; color: #4338ca !important; border-color: #818cf8 !important; box-shadow: inset 0 1px 3px rgba(67, 56, 202, 0.2) !important; overflow: visible !important; }
+        
+        .btn-rev-active-custom::after {
+            content: attr(data-level); position: absolute; top: -8px; right: -8px;
+            background-color: #10b981; color: white; font-size: 10px; font-weight: 800; width: 18px; height: 18px;
+            border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.2); z-index: 10;
+        }
+
+        /* Texto Colorido */
+        .text-rev-0 { color: #334155; text-shadow: 0 1px 0 rgba(255,255,255,0.8); }
+        .text-rev-1 { color: #475569; } .text-rev-2 { color: #0284c7; } .text-rev-3 { color: #2563eb; } .text-rev-custom { color: #4f46e5; }
+
+        /* --- OUTROS --- */
+        .nav-tab { padding: 0 1rem; height: 100%; display: flex; align-items: center; gap: 0.5rem; color: #64748b; font-weight: 500; font-size: 0.875rem; border-bottom: 2px solid transparent; transition: all 0.2s; white-space: nowrap; }
+        .nav-tab:hover { color: #0284c7; background-color: #f8fafc; } .nav-tab.active { color: #0284c7; border-bottom-color: #0284c7; background-color: #f0f9ff; }
+        .modal-tab { padding: 10px 5px; cursor: pointer; border-bottom: 2px solid transparent; color: #6b7280; font-weight: 600; font-size: 0.85rem; }
+        .modal-tab.active { color: #0284c7; border-bottom-color: #0284c7; } .modal-tab-danger.active { color: #dc2626; border-bottom-color: #dc2626; }
+        .btn-del-court { margin-left: 8px; font-size: 10px; width: 16px; height: 16px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.1); color: inherit; cursor: pointer; transition: all 0.2s; }
+        .btn-del-court:hover { background: #ef4444; color: white; transform: scale(1.1); }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800 h-screen flex overflow-hidden font-sans">
+
+    <div id="sidebar-container"></div>
+
+    <main class="flex-1 flex flex-col min-w-0 bg-gray-100 overflow-hidden">
+        <header class="bg-white border-b border-gray-200 shadow-sm shrink-0 z-10">
+            <div class="h-16 px-6 flex justify-between items-center border-b border-gray-100">
+                <div>
+                    <h1 class="text-xl font-bold text-gray-800 flex items-center gap-2">
+                        <i class="fa-solid fa-gavel text-sky-600"></i> Controle de Jurisprudência
+                    </h1>
+                </div>
+                <div class="flex items-center gap-4 bg-gray-50 px-4 py-1.5 rounded-lg border border-gray-100 shadow-inner">
+                    <div class="text-right">
+                        <p id="labelProgress" class="text-[10px] text-gray-500 font-bold uppercase">Progresso (Geral)</p>
+                        <p id="progressText" class="text-sm font-bold text-sky-700 leading-none">0%</p>
+                    </div>
+                    <div class="w-32 h-2 bg-gray-200 rounded-full overflow-hidden shadow-inner">
+                        <div id="progressBar" class="h-full bg-sky-500 transition-all duration-500" style="width: 0%"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="h-12 px-6 flex justify-between items-center bg-white overflow-x-auto">
+                <div class="flex gap-4 h-full">
+                    <button id="nav-informativos" class="nav-tab active" onclick="mudarModo('informativos')"><i class="fa-solid fa-file-lines"></i> Informativos</button>
+                    <button id="nav-sumulas" class="nav-tab" onclick="mudarModo('sumulas')"><i class="fa-solid fa-book-bookmark"></i> Súmulas</button>
+                    <button id="nav-repetitivos" class="nav-tab" onclick="mudarModo('repetitivos')"><i class="fa-solid fa-star"></i> Repetitivos</button>
+                    <button id="nav-ojs" class="nav-tab" onclick="mudarModo('ojs')"><i class="fa-solid fa-paragraph"></i> OJs e PNs</button>
+                    <button id="nav-jur-teses" class="nav-tab" onclick="mudarModo('jur-teses')"><i class="fa-solid fa-scale-balanced"></i> Jur. Teses</button>
+                </div>
+                <button onclick="abrirModal()" class="w-9 h-9 rounded-full bg-gradient-to-br from-sky-50 to-sky-100 text-sky-600 hover:to-sky-200 transition shadow-sm flex items-center justify-center border border-sky-200 hover:shadow-md transform hover:-translate-y-0.5 flex-shrink-0" title="Gerenciar Itens">
+                    <i class="fa-solid fa-gear text-lg"></i>
+                </button>
+            </div>
+        </header>
+
+        <div class="flex-1 overflow-y-auto p-6 scroll-smooth bg-gray-100">
+            <div class="bg-white/80 p-3 rounded-3xl border border-white/50 shadow-lg shadow-gray-200/50 mb-8 flex flex-wrap items-center justify-between gap-4 sticky top-0 z-10 backdrop-blur-xl">
+                <div id="courtTabsContainer" class="flex bg-gray-100/80 p-1.5 rounded-2xl gap-1 overflow-x-auto max-w-2xl shadow-inner border border-gray-200/50"></div>
+                <div class="flex items-center gap-3 bg-gray-50/80 px-3 py-2 rounded-2xl border border-gray-200/50 shadow-sm">
+                    <label class="text-xs font-bold text-gray-400 uppercase">Ano:</label>
+                    <select id="anoSelect" onchange="mudarAno(this.value)" class="bg-transparent border-none text-gray-700 text-sm focus:ring-0 block p-1 outline-none font-bold cursor-pointer"></select>
+                </div>
+            </div>
+
+            <div id="gridContainer" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-8">
+                </div>
+            <div class="h-10"></div>
+        </div>
+    </main>
+
+    <div id="configModal" class="fixed inset-0 bg-black/60 hidden z-50 flex items-center justify-center backdrop-blur-sm transition-all">
+        <div class="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden transform transition-all scale-100 border border-white/50">
+            <div class="bg-gray-50/80 px-6 py-4 border-b border-gray-100 flex justify-between items-center backdrop-blur-sm">
+                <h3 id="modalTitle" class="text-lg font-bold text-gray-800">Gerenciar</h3>
+                <button onclick="fecharModal()" class="text-gray-400 hover:text-red-500 transition-colors w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100"><i class="fa-solid fa-xmark text-xl"></i></button>
+            </div>
+            <div class="flex border-b border-gray-100 px-2 bg-gray-50/30">
+                <button id="tabNewCourt" onclick="switchModalTab('newCourt')" class="modal-tab flex-1 text-center">Novo Tribunal</button>
+                <button id="tabSingle" onclick="switchModalTab('single')" class="modal-tab active flex-1 text-center">Um por Um</button>
+                <button id="tabRange" onclick="switchModalTab('range')" class="modal-tab flex-1 text-center">Vários</button>
+                <button id="tabReset" onclick="switchModalTab('reset')" class="modal-tab flex-1 text-center hover:text-red-500 transition">Resetar</button>
+            </div>
+            <div class="p-6 space-y-5 bg-white">
+                <div id="commonFields">
+                    <div class="mb-4"><label class="block text-xs font-bold text-gray-500 uppercase mb-1 pl-1">Tribunal</label><select id="inputTribunalSelect" class="w-full border border-gray-200 rounded-xl p-3 focus:ring-2 focus:ring-sky-200 focus:border-sky-400 bg-gray-50/50 transition shadow-sm"></select></div>
+                    <div><label class="block text-xs font-bold text-gray-500 uppercase mb-1 pl-1">Ano</label><input type="number" id="inputAno" class="w-full border border-gray-200 rounded-xl p-3 focus:ring-2 focus:ring-sky-200 focus:border-sky-400 bg-gray-50/50 transition shadow-sm" placeholder="Ex: 2025"></div>
+                </div>
+                <div id="formNewCourt" class="hidden">
+                    <label class="block text-xs font-bold text-gray-500 uppercase mb-1 pl-1">Nome do Tribunal</label>
+                    <input type="text" id="inputNewTribunalName" class="w-full border border-gray-200 rounded-xl p-3 focus:ring-2 focus:ring-sky-200 focus:border-sky-400 bg-white transition shadow-sm" placeholder="Sigla (Ex: TSE, TRT, STF)">
+                    <p class="text-xs text-gray-400 mt-2 pl-2 flex items-center gap-1"><i class="fa-solid fa-circle-info"></i> O novo tribunal aparecerá na aba atual.</p>
+                </div>
+                <div id="formSingle">
+                    <label class="block text-xs font-bold text-gray-500 uppercase mb-1 pl-1">Número</label>
+                    <input type="number" id="inputNumSingle" class="w-full border border-gray-200 rounded-xl p-3 focus:ring-2 focus:ring-sky-200 focus:border-sky-400 bg-gray-50/50 transition shadow-sm" placeholder="Ex: 1135">
+                </div>
+                <div id="formRange" class="hidden grid grid-cols-2 gap-4">
+                    <div><label class="block text-xs font-bold text-gray-500 uppercase mb-1 pl-1">De (Início)</label><input type="number" id="inputNumStart" class="w-full border border-gray-200 rounded-xl p-3 focus:ring-2 focus:ring-sky-200 focus:border-sky-400 bg-gray-50/50 transition shadow-sm" placeholder="Ex: 1120"></div>
+                    <div><label class="block text-xs font-bold text-gray-500 uppercase mb-1 pl-1">Até (Fim)</label><input type="number" id="inputNumEnd" class="w-full border border-gray-200 rounded-xl p-3 focus:ring-2 focus:ring-sky-200 focus:border-sky-400 bg-gray-50/50 transition shadow-sm" placeholder="Ex: 1140"></div>
+                </div>
+                <div id="formReset" class="hidden">
+                    <div class="bg-red-50 border border-red-100 rounded-2xl p-4 flex gap-3 items-start shadow-sm">
+                        <div class="bg-red-100 p-2 rounded-full"><i class="fa-solid fa-triangle-exclamation text-red-500 text-lg"></i></div>
+                        <div><h4 class="text-sm font-bold text-red-800">Atenção!</h4><p class="text-xs text-red-700 mt-1 leading-relaxed">Esta ação irá marcar como <strong>NÃO LIDO</strong> todos os itens do Tribunal e Ano selecionados.</p></div>
+                    </div>
+                </div>
+                <button id="btnActionAdd" onclick="salvarDados()" class="w-full bg-gradient-to-br from-sky-500 to-sky-600 hover:from-sky-600 hover:to-sky-700 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-sky-200 transition mt-2 transform hover:-translate-y-0.5 active:translate-y-0"><i class="fa-solid fa-plus mr-2"></i> Adicionar</button>
+                <button id="btnActionReset" onclick="executarReset()" class="hidden w-full bg-gradient-to-br from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-red-200 transition mt-2 transform hover:-translate-y-0.5 active:translate-y-0"><i class="fa-solid fa-eraser mr-2"></i> Resetar Leituras</button>
+                <button id="btnActionCreate" onclick="criarTribunal()" class="hidden w-full bg-gradient-to-br from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-emerald-200 transition mt-2 transform hover:-translate-y-0.5 active:translate-y-0"><i class="fa-solid fa-check mr-2"></i> Criar Tribunal</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // === BANCOS DE DADOS INDEPENDENTES ===
+        const databases = {
+            'informativos': JSON.parse(localStorage.getItem('db_informativos')) || { 'STF': {}, 'STJ': {} },
+            'sumulas': JSON.parse(localStorage.getItem('db_sumulas')) || { 'STF - Vinculante': {}, 'STF': {}, 'STJ': {} },
+            'repetitivos': JSON.parse(localStorage.getItem('db_repetitivos')) || { 'STF': {}, 'STJ': {} },
+            'ojs': JSON.parse(localStorage.getItem('db_ojs')) || { 'TST': {} },
+            'jur-teses': JSON.parse(localStorage.getItem('db_jur_teses')) || { 'STJ': {} }
+        };
+
+        // Leituras unificadas
+        let leituras = JSON.parse(localStorage.getItem('jurisprudencia_lidos_niveis')) || {};
+
+        // ESTADO GLOBAL
+        let currentMode = 'informativos'; 
+        let tribunalAtual = 'STF';
+        let anoAtual = new Date().getFullYear().toString();
+
+        // Mapeamento de Títulos
+        const cardTitles = {
+            'informativos': 'INFORMATIVO',
+            'sumulas': 'SÚMULA',
+            'repetitivos': 'REPETITIVO',
+            'ojs': 'OJ / PN',
+            'jur-teses': 'JUR. TESES'
+        };
+
+        function init() {
+            // Garante que "STF - Vinculante" exista em súmulas
+            if (!databases['sumulas']['STF - Vinculante']) {
+                databases['sumulas']['STF - Vinculante'] = {};
+            }
+            mudarModo('informativos');
+        }
+
+        // --- SISTEMA DE MODOS ---
+        function mudarModo(modo) {
+            currentMode = modo;
+            
+            // Atualiza UI das Abas
+            document.querySelectorAll('.nav-tab').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(`nav-${modo}`).classList.add('active');
+            
+            // Define o tribunal inicial com base na prioridade
+            const dbAtual = databases[currentMode];
+            const keys = Object.keys(dbAtual);
+            
+            // Lógica de Prioridade para Seleção Inicial
+            const priority = ['STF - Vinculante', 'STF', 'STJ', 'TST'];
+            
+            // Tenta achar o primeiro da lista de prioridade que existe no banco
+            let found = false;
+            for(let p of priority) {
+                if(dbAtual[p]) {
+                    tribunalAtual = p;
+                    found = true;
+                    break;
+                }
+            }
+            
+            // Se não achou nenhum prioritário, pega o primeiro que tiver
+            if(!found && keys.length > 0) {
+                tribunalAtual = keys[0];
+            } else if (!found) {
+                tribunalAtual = '';
+            }
+            
+            renderTribunalTabs();
+            carregarAnosNoSelect();
+            gerarGrid();
+        }
+
+        // --- PERSISTÊNCIA ---
+        function salvarDb() {
+            const key = `db_${currentMode}`;
+            localStorage.setItem(key, JSON.stringify(databases[currentMode]));
+            renderTribunalTabs(); carregarAnosNoSelect(); gerarGrid(); 
+        }
+        function salvarLeituras() { 
+            localStorage.setItem('jurisprudencia_lidos_niveis', JSON.stringify(leituras)); 
+            gerarGrid(); 
+        }
+
+        // --- MANIPULAÇÃO DE DADOS ---
+        function criarTribunal() {
+            const novoNome = document.getElementById('inputNewTribunalName').value.trim().toUpperCase();
+            if(!novoNome) return alert("Digite o nome do tribunal.");
+            if(databases[currentMode][novoNome]) return alert("Este tribunal já existe nesta aba.");
+            
+            databases[currentMode][novoNome] = {}; 
+            salvarDb();
+            tribunalAtual = novoNome; 
+            renderTribunalTabs(); carregarAnosNoSelect(); gerarGrid();
+            document.getElementById('inputNewTribunalName').value = ''; fecharModal();
+        }
+
+        function adicionarUnico(tribunal, ano, numero) {
+            if (!numero || !ano || !tribunal) return alert("Preencha todos os dados!");
+            const db = databases[currentMode];
+            if (!db[tribunal]) db[tribunal] = {};
+            if (!db[tribunal][ano]) db[tribunal][ano] = [];
+            
+            if (!db[tribunal][ano].includes(parseInt(numero))) {
+                db[tribunal][ano].push(parseInt(numero)); 
+                db[tribunal][ano].sort((a, b) => b - a);
+                tribunalAtual = tribunal; anoAtual = ano; 
+                salvarDb(); return true;
+            } else { alert(`Item ${numero} já existe!`); return false; }
+        }
+
+        function adicionarFaixa(tribunal, ano, inicio, fim) {
+            if (!inicio || !fim || !ano || !tribunal) return alert("Preencha todos os dados!");
+            if (parseInt(inicio) > parseInt(fim)) { let temp = inicio; inicio = fim; fim = temp; }
+            const db = databases[currentMode];
+            if (!db[tribunal]) db[tribunal] = {};
+            if (!db[tribunal][ano]) db[tribunal][ano] = [];
+            
+            let count = 0; 
+            for (let i = parseInt(inicio); i <= parseInt(fim); i++) { 
+                if (!db[tribunal][ano].includes(i)) { db[tribunal][ano].push(i); count++; } 
+            }
+            if(count > 0) { 
+                db[tribunal][ano].sort((a, b) => b - a); 
+                tribunalAtual = tribunal; anoAtual = ano; 
+                salvarDb(); alert(`${count} itens adicionados!`); return true; 
+            } else { alert("Nenhum novo item."); return false; }
+        }
+
+        // --- ID E EXCLUSÃO ---
+        function getId(num) {
+            if (currentMode === 'informativos') return `${tribunalAtual}-${num}`;
+            return `${currentMode}-${tribunalAtual}-${num}`;
+        }
+
+        function excluirItem(tribunal, ano, numero, event) {
+            event.stopPropagation();
+            if (confirm(`Excluir ${cardTitles[currentMode]} ${numero}?`)) {
+                databases[currentMode][tribunal][ano] = databases[currentMode][tribunal][ano].filter(n => n !== numero);
+                const idLeitura = (currentMode === 'informativos') ? `${tribunal}-${numero}` : `${currentMode}-${tribunal}-${numero}`;
+                if (leituras[idLeitura]) delete leituras[idLeitura];
+                salvarLeituras(); salvarDb();
+            }
+        }
+
+        function resetarLeitura(id, event) {
+            event.stopPropagation();
+            if(confirm("Zerar a leitura deste item?")) { delete leituras[id]; salvarLeituras(); }
+        }
+
+        function excluirTribunal(nome, event) {
+            event.stopPropagation();
+            if(confirm(`Excluir tribunal "${nome}" e todos os seus itens desta aba?`)) {
+                delete databases[currentMode][nome];
+                // Recalcula tribunal atual após excluir
+                mudarModo(currentMode); // Reusa a lógica de seleção de prioridade
+                salvarDb();
+            }
+        }
+
+        function executarReset() {
+            const tribunalAlvo = document.getElementById('inputTribunalSelect').value;
+            const anoAlvo = document.getElementById('inputAno').value;
+            if(!tribunalAlvo || !anoAlvo) return alert("Selecione Tribunal e Ano.");
+            
+            const db = databases[currentMode];
+            if(!db[tribunalAlvo] || !db[tribunalAlvo][anoAlvo]) return alert("Não existem itens para este período.");
+            
+            if(confirm(`ATENÇÃO: Resetar leitura de TODOS os itens do ${tribunalAlvo} em ${anoAlvo}?`)) {
+                const lista = db[tribunalAlvo][anoAlvo]; 
+                let count = 0;
+                lista.forEach(num => { 
+                    const id = (currentMode === 'informativos') ? `${tribunalAlvo}-${num}` : `${currentMode}-${tribunalAlvo}-${num}`;
+                    if(leituras[id]) { delete leituras[id]; count++; } 
+                });
+                salvarLeituras(); fecharModal();
+                if(tribunalAtual === tribunalAlvo && anoAtual === anoAlvo) gerarGrid();
+                alert(`Leituras resetadas: ${count}`);
+            }
+        }
+
+        // --- LÓGICA DE REVISÃO ---
+        function setarNivel(id, nivelAlvo) {
+            if (navigator.vibrate) navigator.vibrate(20);
+            leituras[id] = nivelAlvo; salvarLeituras();
+        }
+        function inputNivelPersonalizado(id, event) {
+            event.stopPropagation();
+            const valorAtual = leituras[id] || 0;
+            const input = prompt("Quantas vezes você leu este item?", valorAtual > 3 ? valorAtual : "");
+            if (input !== null) {
+                const num = parseInt(input);
+                if (!isNaN(num) && num > 0) { leituras[id] = num; salvarLeituras(); } 
+                else if (num === 0) { delete leituras[id]; salvarLeituras(); }
+            }
+        }
+
+        // --- INTERFACE (ORDENAÇÃO FORÇADA AQUI) ---
+        function renderTribunalTabs() { 
+            const container = document.getElementById('courtTabsContainer'); container.innerHTML = '';
+            const db = databases[currentMode];
+            
+            // 1. Pega todas as chaves (Tribunais)
+            let keys = Object.keys(db);
+            
+            // 2. Define a ordem de prioridade
+            const priority = ['STF - Vinculante', 'STF', 'STJ', 'TST'];
+            
+            // 3. Ordena o array de chaves
+            keys.sort((a, b) => {
+                const idxA = priority.indexOf(a);
+                const idxB = priority.indexOf(b);
+                
+                // Se ambos estão na lista de prioridade, ordena pela posição na lista
+                if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+                
+                // Se só A está na lista, A vem primeiro
+                if (idxA !== -1) return -1;
+                
+                // Se só B está na lista, B vem primeiro
+                if (idxB !== -1) return 1;
+                
+                // Se nenhum está, ordem alfabética
+                return a.localeCompare(b);
+            });
+
+            // 4. Gera os botões na ordem correta
+            keys.forEach(nome => {
+                const btn = document.createElement('button'); const isActive = nome === tribunalAtual;
+                btn.className = isActive ? "px-4 py-2 rounded-xl text-sm font-bold shadow-sm bg-white text-sky-700 transition whitespace-nowrap flex items-center border border-gray-200/50" : "px-4 py-2 rounded-xl text-sm font-medium text-gray-500 hover:text-gray-700 transition whitespace-nowrap flex items-center hover:bg-white/60 border border-transparent";
+                btn.onclick = () => mudarTribunal(nome); btn.innerHTML = `<span>${nome}</span>`;
+                
+                // Lista de tribunais protegidos contra exclusão
+                const protectedCourts = ['STF', 'STJ', 'TST', 'STF - Vinculante'];
+                
+                if (!protectedCourts.includes(nome)) { 
+                    const btnDel = document.createElement('span'); btnDel.className = 'btn-del-court'; btnDel.innerHTML = '<i class="fa-solid fa-xmark"></i>'; 
+                    btnDel.onclick = (e) => excluirTribunal(nome, e); btn.appendChild(btnDel); 
+                }
+                container.appendChild(btn);
+            });
+        }
+
+        function carregarAnosNoSelect() { 
+            const select = document.getElementById('anoSelect'); 
+            const db = databases[currentMode];
+            if(!db || !db[tribunalAtual]) { select.innerHTML = ''; return; }
+            
+            const anosExistentes = Object.keys(db[tribunalAtual]).sort((a, b) => b - a);
+            if (anosExistentes.length === 0 && !anosExistentes.includes(anoAtual)) anosExistentes.push(anoAtual);
+            
+            select.innerHTML = ''; 
+            anosExistentes.forEach(ano => { 
+                const opt = document.createElement('option'); opt.value = ano; opt.text = ano; 
+                if (ano == anoAtual) opt.selected = true; select.appendChild(opt); 
+            }); 
+            if(select.value) anoAtual = select.value;
+        }
+
+        function mudarTribunal(tribunal) { tribunalAtual = tribunal; renderTribunalTabs(); carregarAnosNoSelect(); gerarGrid(); }
+        function mudarAno(ano) { anoAtual = ano; gerarGrid(); }
+
+        function gerarGrid() {
+            const container = document.getElementById('gridContainer'); container.innerHTML = '';
+            const db = databases[currentMode];
+            if(!db[tribunalAtual]) db[tribunalAtual] = {};
+            const listaItens = db[tribunalAtual][anoAtual] || [];
+
+            document.getElementById('labelProgress').innerText = `Progresso (${cardTitles[currentMode]})`;
+            document.getElementById('modalTitle').innerText = `Gerenciar ${cardTitles[currentMode]}`;
+
+            if (listaItens.length === 0) {
+                container.innerHTML = `<div class="col-span-full flex flex-col items-center justify-center py-20 text-gray-400 bg-white/80 rounded-[2rem] border-2 border-dashed border-gray-300/50 shadow-sm backdrop-blur-sm"><div class="bg-gray-50 p-5 rounded-full mb-4 shadow-inner"><i class="fa-solid fa-folder-plus text-5xl text-gray-300/80"></i></div><p class="font-medium text-lg text-gray-500">Nenhum item aqui.</p><button onclick="abrirModal()" class="mt-4 px-8 py-3 bg-gradient-to-r from-sky-500 to-sky-600 text-white rounded-full hover:from-sky-600 hover:to-sky-700 font-bold transition shadow-lg shadow-sky-200/50 text-sm transform hover:-translate-y-0.5">Adicionar agora</button></div>`;
+                atualizarProgresso(0, 0); return;
+            }
+
+            let lidosCount = 0;
+
+            listaItens.forEach(num => {
+                const id = getId(num);
+                const nivel = leituras[id] || 0;
+                if (nivel > 0) lidosCount++;
+
+                let textColorClass = 'text-rev-0';
+                if (nivel === 1) textColorClass = 'text-rev-1';
+                else if (nivel === 2) textColorClass = 'text-rev-2';
+                else if (nivel === 3) textColorClass = 'text-rev-3';
+                else if (nivel >= 4) textColorClass = 'text-rev-custom';
+
+                const card = document.createElement('div');
+                card.className = `info-card rounded-[2rem] flex flex-col items-center justify-between relative group h-[190px]`;
+
+                const btnDel = document.createElement('button');
+                btnDel.className = "card-action-btn btn-delete-card"; btnDel.title = "Excluir"; btnDel.innerHTML = '<i class="fa-solid fa-trash-can"></i>';
+                btnDel.onclick = (e) => excluirItem(tribunalAtual, anoAtual, num, e);
+
+                const btnReset = document.createElement('button');
+                btnReset.className = "card-action-btn btn-reset-card"; btnReset.title = "Zerar Leitura"; btnReset.innerHTML = '<i class="fa-solid fa-rotate-left"></i>';
+                btnReset.onclick = (e) => resetarLeitura(id, e);
+
+                const infoContent = `
+                    <div class="card-header-bar w-full text-[10px] uppercase tracking-widest text-gray-400 font-bold py-2.5">${cardTitles[currentMode]}</div>
+                    <div class="text-center flex-1 flex flex-col justify-center pb-2">
+                        <span class="info-num text-5xl font-extrabold ${textColorClass} leading-tight tracking-tight drop-shadow-sm">${num}</span>
+                    </div>
+                `;
+
+                const revContainer = document.createElement('div');
+                revContainer.className = "rev-container-modern mb-5";
+
+                for (let i = 1; i <= 3; i++) {
+                    const btn = document.createElement('button');
+                    let btnClass = 'rev-btn';
+                    if (nivel >= i) {
+                        if(nivel === 1) btnClass += ' btn-rev-active-1';
+                        else if(nivel === 2) btnClass += ' btn-rev-active-2';
+                        else if(nivel >= 3) btnClass += ' btn-rev-active-3';
+                    }
+                    btn.className = btnClass;
+                    btn.innerText = i;
+                    btn.onclick = (e) => { e.stopPropagation(); setarNivel(id, i); };
+                    revContainer.appendChild(btn);
+                }
+
+                const btnCustom = document.createElement('button');
+                let customText = '...'; let customClass = 'rev-btn';
+                if (nivel > 3) { customClass += ' btn-rev-active-custom'; btnCustom.setAttribute('data-level', nivel); }
+                btnCustom.className = customClass;
+                btnCustom.innerText = customText; btnCustom.title = "Outro nível...";
+                btnCustom.onclick = (e) => inputNivelPersonalizado(id, e);
+                revContainer.appendChild(btnCustom);
+
+                card.innerHTML = infoContent;
+                card.appendChild(btnDel); card.appendChild(btnReset); card.appendChild(revContainer);
+                container.appendChild(card);
+            });
+            atualizarProgresso(lidosCount, listaItens.length);
+        }
+
+        function atualizarProgresso(lidos, total) {
+            const porcentagem = total === 0 ? 0 : Math.round((lidos / total) * 100);
+            document.getElementById('progressBar').style.width = `${porcentagem}%`;
+            document.getElementById('progressText').innerText = `${porcentagem}% (${lidos}/${total})`;
+            const barra = document.getElementById('progressBar');
+            if (porcentagem === 100) { barra.classList.remove('bg-sky-500'); barra.classList.add('bg-emerald-500'); } 
+            else { barra.classList.add('bg-sky-500'); barra.classList.remove('bg-emerald-500'); }
+        }
+
+        // --- MODAL ---
+        function abrirModal() {
+            document.getElementById('configModal').classList.remove('hidden');
+            document.getElementById('inputAno').value = anoAtual;
+            const select = document.getElementById('inputTribunalSelect'); select.innerHTML = '';
+            // No modal, a ordem não precisa ser forçada, mas é bom para consistência
+            const db = databases[currentMode];
+            let keys = Object.keys(db);
+            const priority = ['STF - Vinculante', 'STF', 'STJ', 'TST'];
+            keys.sort((a, b) => {
+                const idxA = priority.indexOf(a); const idxB = priority.indexOf(b);
+                if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+                if (idxA !== -1) return -1; if (idxB !== -1) return 1;
+                return a.localeCompare(b);
+            });
+            
+            keys.forEach(t => { const opt = document.createElement('option'); opt.value = t; opt.text = t; if(t === tribunalAtual) opt.selected = true; select.appendChild(opt); });
+            switchModalTab('single');
+        }
+        function fecharModal() { document.getElementById('configModal').classList.add('hidden'); }
+        
+        function switchModalTab(tab) {
+            document.querySelectorAll('.modal-tab').forEach(t => { t.classList.remove('active'); t.classList.remove('modal-tab-danger'); });
+            document.getElementById('commonFields').classList.add('hidden');
+            document.getElementById('formNewCourt').classList.add('hidden');
+            document.getElementById('formSingle').classList.add('hidden');
+            document.getElementById('formRange').classList.add('hidden');
+            document.getElementById('formReset').classList.add('hidden');
+            document.getElementById('btnActionAdd').classList.add('hidden');
+            document.getElementById('btnActionReset').classList.add('hidden');
+            document.getElementById('btnActionCreate').classList.add('hidden');
+
+            if(tab === 'newCourt') {
+                document.getElementById('tabNewCourt').classList.add('active');
+                document.getElementById('formNewCourt').classList.remove('hidden');
+                document.getElementById('btnActionCreate').classList.remove('hidden');
+            } else if(tab === 'reset') {
+                document.getElementById('tabReset').classList.add('active', 'modal-tab-danger');
+                document.getElementById('commonFields').classList.remove('hidden');
+                document.getElementById('formReset').classList.remove('hidden');
+                document.getElementById('btnActionReset').classList.remove('hidden');
+            } else {
+                document.getElementById(tab === 'single' ? 'tabSingle' : 'tabRange').classList.add('active');
+                document.getElementById('commonFields').classList.remove('hidden');
+                document.getElementById('btnActionAdd').classList.remove('hidden');
+                if(tab === 'single') document.getElementById('formSingle').classList.remove('hidden');
+                else { document.getElementById('formRange').classList.remove('hidden'); document.getElementById('formRange').classList.add('grid'); }
+            }
+        }
+
+        function salvarDados() {
+            const ano = document.getElementById('inputAno').value; 
+            const tribunalAlvo = document.getElementById('inputTribunalSelect').value;
+            const isSingle = document.getElementById('tabSingle').classList.contains('active'); 
+            let sucesso = false;
+            if(isSingle) { const num = document.getElementById('inputNumSingle').value; sucesso = adicionarUnico(tribunalAlvo, ano, num); } 
+            else { const start = document.getElementById('inputNumStart').value; const end = document.getElementById('inputNumEnd').value; sucesso = adicionarFaixa(tribunalAlvo, ano, start, end); }
+            if(sucesso) { fecharModal(); document.getElementById('inputNumSingle').value = ''; document.getElementById('inputNumStart').value = ''; document.getElementById('inputNumEnd').value = ''; }
+        }
+        init();
+    </script>
+    
+    <script src="../menu.js"></script>
+    <script type="module" src="firebase-config.js"></script>
+    <script type="module" src="auth.js"></script>
+</body>
+</html>
