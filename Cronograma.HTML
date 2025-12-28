@@ -100,268 +100,270 @@
     </main>
 
     <script type="module">
+    console.log("🚀 Iniciando Script Cronograma...");
+
     import { db, auth } from "./firebase-config.js";
     import { ref, set, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
     import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
-    document.addEventListener('DOMContentLoaded', function() {
+    // Elementos DOM (Seleção direta, pois type="module" já espera o DOM)
+    const scheduleBody = document.getElementById('scheduleBody');
+    const addRowBtn = document.getElementById('addRowBtn');
+    const saveIndicator = document.getElementById('saveIndicator');
+    const saveStatus = document.getElementById('saveStatus');
+    const saveIcon = document.getElementById('saveIcon');
+    const totalRowsElement = document.getElementById('totalRows');
+    const emptyMessage = document.getElementById('emptyMessage');
+    const loadingMessage = document.getElementById('loadingMessage');
+
+    // Toolbar elements
+    const boldBtn = document.getElementById('boldBtn');
+    const underlineBtn = document.getElementById('underlineBtn');
+    const textColorPicker = document.getElementById('textColorPicker');
+    const fillColorPicker = document.getElementById('fillColorPicker');
+    const applyFillBtn = document.getElementById('applyFillBtn');
+    const applyTextColorBtn = document.getElementById('applyTextColorBtn');
+    const alignLeftBtn = document.getElementById('alignLeftBtn');
+    const alignCenterBtn = document.getElementById('alignCenterBtn');
+    const alignRightBtn = document.getElementById('alignRightBtn');
+    const multiSelectBtn = document.getElementById('multiSelectBtn');
+    const undoBtn = document.getElementById('undoBtn');
+
+    // Estado Global
+    let scheduleData = []; 
+    let currentUserUID = null;
+    const undoStack = [];
+    const UNDO_LIMIT = 50;
+    let dragSrcIndex = null;
+    let multiSelectMode = false;
+    const selectedCells = new Set();
+    let isMouseDownForSelect = false;
+
+    // --- AUTHENTICATION ---
+    onAuthStateChanged(auth, (user) => {
+        if (user) {
+            console.log("✅ Cronograma: Usuário detectado", user.email);
+            currentUserUID = user.uid;
+            setStatus('loading', 'Sincronizando...');
+            loadFromFirebase();
+        } else {
+            console.log("❌ Cronograma: Sem usuário");
+            currentUserUID = null;
+            scheduleData = [];
+            renderTable([]);
+            setStatus('error', 'Faça login para ver seu cronograma.');
+        }
+    });
+
+    // --- HELPERS ---
+    function cloneDeep(obj) { return JSON.parse(JSON.stringify(obj)); }
+    
+    function debounce(func, wait) {
+        let timeout;
+        return function(...args) {
+            clearTimeout(timeout);
+            timeout = setTimeout(() => func.apply(this, args), wait);
+        };
+    }
+
+    function setStatus(type, msg) {
+        if(!saveStatus || !saveIndicator) return;
+        saveStatus.textContent = msg;
+        saveIndicator.className = 'flex items-center gap-2';
         
-        // Elementos DOM
-        const scheduleBody = document.getElementById('scheduleBody');
-        const addRowBtn = document.getElementById('addRowBtn');
-        const saveIndicator = document.getElementById('saveIndicator');
-        const saveStatus = document.getElementById('saveStatus');
-        const saveIcon = document.getElementById('saveIcon');
-        const totalRowsElement = document.getElementById('totalRows');
-        const emptyMessage = document.getElementById('emptyMessage');
-        const loadingMessage = document.getElementById('loadingMessage');
+        if(type === 'saving' || type === 'loading') {
+            saveIndicator.classList.add('text-sky-500');
+            saveIcon.className = 'fas fa-sync-alt fa-spin';
+        } else if (type === 'saved') {
+            saveIndicator.classList.add('text-green-600');
+            saveIcon.className = 'fas fa-check-circle';
+        } else if (type === 'error') {
+            saveIndicator.classList.add('text-red-500');
+            saveIcon.className = 'fas fa-exclamation-circle';
+        } else {
+            saveIndicator.classList.add('text-gray-400');
+            saveIcon.className = 'fas fa-clock';
+        }
+    }
 
-        // Toolbar elements
-        const boldBtn = document.getElementById('boldBtn');
-        const underlineBtn = document.getElementById('underlineBtn');
-        const textColorPicker = document.getElementById('textColorPicker');
-        const fillColorPicker = document.getElementById('fillColorPicker');
-        const applyFillBtn = document.getElementById('applyFillBtn');
-        const applyTextColorBtn = document.getElementById('applyTextColorBtn');
-        const alignLeftBtn = document.getElementById('alignLeftBtn');
-        const alignCenterBtn = document.getElementById('alignCenterBtn');
-        const alignRightBtn = document.getElementById('alignRightBtn');
-        const multiSelectBtn = document.getElementById('multiSelectBtn');
-        const undoBtn = document.getElementById('undoBtn');
+    // --- FIREBASE CRUD ---
+    async function loadFromFirebase() {
+        if (!currentUserUID) return;
+        
+        scheduleBody.innerHTML = '';
+        loadingMessage.classList.remove('hidden');
+        emptyMessage.classList.add('hidden');
 
-        // Estado Global
-        let scheduleData = []; 
-        let currentUserUID = null;
-        const undoStack = [];
-        const UNDO_LIMIT = 50;
-        let dragSrcIndex = null;
-        let multiSelectMode = false;
-        const selectedCells = new Set();
-        let isMouseDownForSelect = false;
-
-        // --- AUTHENTICATION ---
-        onAuthStateChanged(auth, (user) => {
-            if (user) {
-                currentUserUID = user.uid;
-                setStatus('loading', 'Sincronizando...');
-                loadFromFirebase();
+        try {
+            const snapshot = await get(ref(db, `users/${currentUserUID}/cronograma`));
+            if (snapshot.exists()) {
+                const data = snapshot.val();
+                scheduleData = (data || []).map(r => ({
+                    time: r.time || '',
+                    days: r.days || Array(7).fill(''),
+                    timeBg: r.timeBg||'', bg: r.bg||Array(7).fill(''),
+                    timeColor: r.timeColor||'', color: r.color||Array(7).fill(''),
+                    timeAlign: r.timeAlign||'', align: r.align||Array(7).fill('')
+                }));
             } else {
-                currentUserUID = null;
-                scheduleData = [];
-                renderTable([]);
-                setStatus('error', 'Faça login para ver seu cronograma.');
+                // Dados padrão se vazio
+                scheduleData = [
+                    { time: '08:00', days: ['Descanso', 'Português', 'Matemática', 'Direito Const.', 'Informática', 'Revisão', 'Simulado'], bg:[], color:[], align:[] },
+                    { time: '14:00', days: ['Lazer', 'Dir. Admin', 'Raciocínio', 'Dir. Penal', 'Atualidades', 'Lei Seca', 'Correção'], bg:[], color:[], align:[] }
+                ];
+                saveToFirebase(true); // Salva o padrão
             }
-        });
-
-        // --- HELPERS ---
-        function cloneDeep(obj) { return JSON.parse(JSON.stringify(obj)); }
-        
-        function debounce(func, wait) {
-            let timeout;
-            return function(...args) {
-                clearTimeout(timeout);
-                timeout = setTimeout(() => func.apply(this, args), wait);
-            };
-        }
-
-        function setStatus(type, msg) {
-            saveStatus.textContent = msg;
-            saveIndicator.className = 'flex items-center gap-2';
-            
-            if(type === 'saving' || type === 'loading') {
-                saveIndicator.classList.add('text-sky-500');
-                saveIcon.className = 'fas fa-sync-alt fa-spin';
-            } else if (type === 'saved') {
-                saveIndicator.classList.add('text-green-600');
-                saveIcon.className = 'fas fa-check-circle';
-            } else if (type === 'error') {
-                saveIndicator.classList.add('text-red-500');
-                saveIcon.className = 'fas fa-exclamation-circle';
-            } else {
-                saveIndicator.classList.add('text-gray-400');
-                saveIcon.className = 'fas fa-clock';
-            }
-        }
-
-        // --- FIREBASE CRUD ---
-        async function loadFromFirebase() {
-            if (!currentUserUID) return;
-            
-            scheduleBody.innerHTML = '';
-            loadingMessage.classList.remove('hidden');
-            emptyMessage.classList.add('hidden');
-
-            try {
-                const snapshot = await get(ref(db, `users/${currentUserUID}/cronograma`));
-                if (snapshot.exists()) {
-                    const data = snapshot.val();
-                    // Normalizar dados (garantir arrays onde necessário)
-                    scheduleData = (data || []).map(r => ({
-                        time: r.time || '',
-                        days: r.days || Array(7).fill(''),
-                        timeBg: r.timeBg||'', bg: r.bg||Array(7).fill(''),
-                        timeColor: r.timeColor||'', color: r.color||Array(7).fill(''),
-                        timeAlign: r.timeAlign||'', align: r.align||Array(7).fill('')
-                    }));
-                } else {
-                    // Dados padrão se vazio
-                    scheduleData = [
-                        { time: '08:00', days: ['Descanso', 'Português', 'Matemática', 'Direito Const.', 'Informática', 'Revisão', 'Simulado'], bg:[], color:[], align:[] },
-                        { time: '14:00', days: ['Lazer', 'Dir. Admin', 'Raciocínio', 'Dir. Penal', 'Atualidades', 'Lei Seca', 'Correção'], bg:[], color:[], align:[] }
-                    ];
-                    // Salvar o padrão
-                    saveToFirebase(true);
-                }
-                loadingMessage.classList.add('hidden');
-                renderTable(scheduleData);
-                setStatus('saved', 'Carregado da nuvem');
-            } catch (e) {
-                console.error(e);
-                loadingMessage.classList.add('hidden');
-                setStatus('error', 'Erro ao carregar dados');
-            }
-        }
-
-        async function saveToFirebase(silent = false) {
-            if (!currentUserUID) return;
-            if (!silent) setStatus('saving', 'Salvando na nuvem...');
-            
-            try {
-                await set(ref(db, `users/${currentUserUID}/cronograma`), scheduleData);
-                if (!silent) setStatus('saved', 'Alterações salvas');
-            } catch (e) {
-                console.error(e);
-                setStatus('error', 'Erro ao salvar');
-            }
-        }
-        
-        const debouncedSave = debounce(saveToFirebase, 1500);
-
-        // --- UNDO/REDO & STATE ---
-        function pushSnapshot() {
-            const snapshot = cloneDeep(scheduleData);
-            if (undoStack.length > 0) {
-                const last = undoStack[undoStack.length - 1];
-                if (JSON.stringify(last) === JSON.stringify(snapshot)) return;
-            }
-            undoStack.push(snapshot);
-            if (undoStack.length > UNDO_LIMIT) undoStack.shift();
-        }
-
-        function undo() {
-            if (undoStack.length === 0) return;
-            const prev = undoStack.pop();
-            scheduleData = cloneDeep(prev);
+            loadingMessage.classList.add('hidden');
             renderTable(scheduleData);
-            saveToFirebase();
+            setStatus('saved', 'Carregado da nuvem');
+        } catch (e) {
+            console.error("Erro load:", e);
+            loadingMessage.classList.add('hidden');
+            setStatus('error', 'Erro ao carregar dados');
         }
+    }
 
-        // --- SELEÇÃO ---
-        function clearSelection() {
-            selectedCells.forEach(div => div.classList.remove('selected-cell'));
-            selectedCells.clear();
+    async function saveToFirebase(silent = false) {
+        if (!currentUserUID) return;
+        if (!silent) setStatus('saving', 'Salvando na nuvem...');
+        
+        try {
+            await set(ref(db, `users/${currentUserUID}/cronograma`), scheduleData);
+            console.log("💾 Cronograma salvo no Firebase!");
+            if (!silent) setStatus('saved', 'Alterações salvas');
+        } catch (e) {
+            console.error("Erro save:", e);
+            setStatus('error', 'Erro ao salvar');
         }
+    }
+    
+    const debouncedSave = debounce(saveToFirebase, 1500);
 
-        function toggleCell(div) {
-            if (selectedCells.has(div)) {
-                div.classList.remove('selected-cell');
-                selectedCells.delete(div);
-            } else {
-                div.classList.add('selected-cell');
-                selectedCells.add(div);
-            }
+    // --- UNDO/REDO & STATE ---
+    function pushSnapshot() {
+        const snapshot = cloneDeep(scheduleData);
+        if (undoStack.length > 0) {
+            const last = undoStack[undoStack.length - 1];
+            if (JSON.stringify(last) === JSON.stringify(snapshot)) return;
         }
+        undoStack.push(snapshot);
+        if (undoStack.length > UNDO_LIMIT) undoStack.shift();
+    }
 
-        // --- RENDER ---
-        function renderTable(data) {
-            scheduleBody.innerHTML = '';
-            // Se data for null, usa array vazio
-            const rows = data || [];
+    function undo() {
+        if (undoStack.length === 0) return;
+        const prev = undoStack.pop();
+        scheduleData = cloneDeep(prev);
+        renderTable(scheduleData);
+        saveToFirebase();
+    }
 
-            if (rows.length === 0) {
-                emptyMessage.classList.remove('hidden');
-                totalRowsElement.textContent = 0;
-                return;
-            }
-            emptyMessage.classList.add('hidden');
+    // --- SELEÇÃO ---
+    function clearSelection() {
+        selectedCells.forEach(div => div.classList.remove('selected-cell'));
+        selectedCells.clear();
+    }
 
-            rows.forEach((row, rowIndex) => {
-                const tr = document.createElement('tr');
-                tr.setAttribute('data-row', rowIndex);
+    function toggleCell(div) {
+        if (selectedCells.has(div)) {
+            div.classList.remove('selected-cell');
+            selectedCells.delete(div);
+        } else {
+            div.classList.add('selected-cell');
+            selectedCells.add(div);
+        }
+    }
 
-                // Coluna Horário
-                const timeCell = document.createElement('td');
-                timeCell.className = 'time-cell';
-                if (row.timeBg) timeCell.style.backgroundColor = row.timeBg;
+    // --- RENDER ---
+    function renderTable(data) {
+        scheduleBody.innerHTML = '';
+        const rows = data || [];
+
+        if (rows.length === 0) {
+            emptyMessage.classList.remove('hidden');
+            totalRowsElement.textContent = 0;
+            return;
+        }
+        emptyMessage.classList.add('hidden');
+
+        rows.forEach((row, rowIndex) => {
+            const tr = document.createElement('tr');
+            tr.setAttribute('data-row', rowIndex);
+
+            // Coluna Horário
+            const timeCell = document.createElement('td');
+            timeCell.className = 'time-cell';
+            if (row.timeBg) timeCell.style.backgroundColor = row.timeBg;
+            
+            const timeDiv = document.createElement('div');
+            timeDiv.className = 'editable-content';
+            timeDiv.contentEditable = true;
+            timeDiv.dataset.row = rowIndex;
+            timeDiv.dataset.col = 'time';
+            timeDiv.innerHTML = row.time || '';
+            if (row.timeColor) timeDiv.style.color = row.timeColor;
+            if (row.timeAlign) timeDiv.style.textAlign = row.timeAlign;
+            
+            timeCell.appendChild(timeDiv);
+            tr.appendChild(timeCell);
+
+            // Colunas Dias (0 a 6)
+            (row.days || Array(7).fill('')).forEach((html, dayIndex) => {
+                const td = document.createElement('td');
+                if (row.bg && row.bg[dayIndex]) td.style.backgroundColor = row.bg[dayIndex];
                 
-                const timeDiv = document.createElement('div');
-                timeDiv.className = 'editable-content';
-                timeDiv.contentEditable = true;
-                timeDiv.dataset.row = rowIndex;
-                timeDiv.dataset.col = 'time';
-                timeDiv.innerHTML = row.time || '';
-                if (row.timeColor) timeDiv.style.color = row.timeColor;
-                if (row.timeAlign) timeDiv.style.textAlign = row.timeAlign;
-                
-                timeCell.appendChild(timeDiv);
-                tr.appendChild(timeCell);
+                const div = document.createElement('div');
+                div.className = 'editable-content';
+                div.contentEditable = true;
+                div.dataset.row = rowIndex;
+                div.dataset.col = String(dayIndex);
+                div.innerHTML = html || '';
+                if (row.color && row.color[dayIndex]) div.style.color = row.color[dayIndex];
+                if (row.align && row.align[dayIndex]) div.style.textAlign = row.align[dayIndex];
 
-                // Colunas Dias (0 a 6)
-                (row.days || Array(7).fill('')).forEach((html, dayIndex) => {
-                    const td = document.createElement('td');
-                    if (row.bg && row.bg[dayIndex]) td.style.backgroundColor = row.bg[dayIndex];
-                    
-                    const div = document.createElement('div');
-                    div.className = 'editable-content';
-                    div.contentEditable = true;
-                    div.dataset.row = rowIndex;
-                    div.dataset.col = String(dayIndex);
-                    div.innerHTML = html || '';
-                    if (row.color && row.color[dayIndex]) div.style.color = row.color[dayIndex];
-                    if (row.align && row.align[dayIndex]) div.style.textAlign = row.align[dayIndex];
-
-                    td.appendChild(div);
-                    tr.appendChild(td);
-                });
-
-                // Coluna Ações
-                const actionCell = document.createElement('td');
-                actionCell.className = 'action-cell';
-                const actionWrap = document.createElement('div');
-                actionWrap.className = 'action-wrap';
-
-                const dragBtn = document.createElement('button');
-                dragBtn.className = 'btn-action drag-handle';
-                dragBtn.innerHTML = '<i class="fas fa-grip-vertical"></i>';
-                dragBtn.draggable = true;
-                dragBtn.dataset.row = rowIndex;
-
-                const delBtn = document.createElement('button');
-                delBtn.className = 'btn-action delete';
-                delBtn.innerHTML = '<i class="fas fa-trash"></i>';
-                delBtn.dataset.row = rowIndex;
-                delBtn.onclick = () => deleteRow(rowIndex);
-
-                actionWrap.appendChild(dragBtn);
-                actionWrap.appendChild(delBtn);
-                actionCell.appendChild(actionWrap);
-                tr.appendChild(actionCell);
-                scheduleBody.appendChild(tr);
+                td.appendChild(div);
+                tr.appendChild(td);
             });
 
-            totalRowsElement.textContent = rows.length;
-            bindDragHandlers();
-        }
+            // Coluna Ações
+            const actionCell = document.createElement('td');
+            actionCell.className = 'action-cell';
+            const actionWrap = document.createElement('div');
+            actionWrap.className = 'action-wrap';
 
-        // --- ACTIONS ---
-        function deleteRow(index) {
-            pushSnapshot();
-            scheduleData.splice(index, 1);
-            renderTable(scheduleData);
-            setStatus('saving', 'Salvando...');
-            debouncedSave();
-        }
+            const dragBtn = document.createElement('button');
+            dragBtn.className = 'btn-action drag-handle';
+            dragBtn.innerHTML = '<i class="fas fa-grip-vertical"></i>';
+            dragBtn.draggable = true;
+            dragBtn.dataset.row = rowIndex;
 
+            const delBtn = document.createElement('button');
+            delBtn.className = 'btn-action delete';
+            delBtn.innerHTML = '<i class="fas fa-trash"></i>';
+            delBtn.dataset.row = rowIndex;
+            delBtn.onclick = () => deleteRow(rowIndex);
+
+            actionWrap.appendChild(dragBtn);
+            actionWrap.appendChild(delBtn);
+            actionCell.appendChild(actionWrap);
+            tr.appendChild(actionCell);
+            scheduleBody.appendChild(tr);
+        });
+
+        totalRowsElement.textContent = rows.length;
+        bindDragHandlers();
+    }
+
+    // --- ACTIONS ---
+    function deleteRow(index) {
+        pushSnapshot();
+        scheduleData.splice(index, 1);
+        renderTable(scheduleData);
+        setStatus('saving', 'Salvando...');
+        debouncedSave();
+    }
+
+    if(addRowBtn) {
         addRowBtn.addEventListener('click', () => {
             pushSnapshot();
             const newRow = {
@@ -376,48 +378,50 @@
             setStatus('saving', 'Salvando...');
             debouncedSave();
         });
+    }
 
-        // --- EDIT EVENTS ---
-        scheduleBody.addEventListener('input', (e) => {
-            const el = e.target;
-            if(!el.classList.contains('editable-content')) return;
-            
-            const row = el.dataset.row;
-            const col = el.dataset.col;
-            const val = el.innerHTML;
-            
-            if(col === 'time') scheduleData[row].time = val;
-            else scheduleData[row].days[col] = val;
-            
-            setStatus('saving', 'Digitando...');
-            debouncedSave();
-        });
+    // --- EDIT EVENTS ---
+    scheduleBody.addEventListener('input', (e) => {
+        const el = e.target;
+        if(!el.classList.contains('editable-content')) return;
+        
+        const row = el.dataset.row;
+        const col = el.dataset.col;
+        const val = el.innerHTML;
+        
+        if(col === 'time') scheduleData[row].time = val;
+        else scheduleData[row].days[col] = val;
+        
+        setStatus('saving', 'Digitando...');
+        debouncedSave();
+    });
 
-        scheduleBody.addEventListener('mousedown', (e) => {
-            const el = e.target.closest('.editable-content');
-            if(!el) return;
-            if(multiSelectMode) {
-                e.preventDefault(); 
-                isMouseDownForSelect = true;
-                toggleCell(el);
-            } else if(e.ctrlKey) {
-                e.preventDefault();
-                toggleCell(el);
-            } else {
-                clearSelection();
-            }
-        });
+    scheduleBody.addEventListener('mousedown', (e) => {
+        const el = e.target.closest('.editable-content');
+        if(!el) return;
+        if(multiSelectMode) {
+            e.preventDefault(); 
+            isMouseDownForSelect = true;
+            toggleCell(el);
+        } else if(e.ctrlKey) {
+            e.preventDefault();
+            toggleCell(el);
+        } else {
+            clearSelection();
+        }
+    });
 
-        document.addEventListener('mouseup', () => isMouseDownForSelect = false);
-        scheduleBody.addEventListener('mouseover', (e) => {
-            if(!isMouseDownForSelect || !multiSelectMode) return;
-            const el = e.target.closest('.editable-content');
-            if(el && !selectedCells.has(el)) {
-                el.classList.add('selected-cell');
-                selectedCells.add(el);
-            }
-        });
+    document.addEventListener('mouseup', () => isMouseDownForSelect = false);
+    scheduleBody.addEventListener('mouseover', (e) => {
+        if(!isMouseDownForSelect || !multiSelectMode) return;
+        const el = e.target.closest('.editable-content');
+        if(el && !selectedCells.has(el)) {
+            el.classList.add('selected-cell');
+            selectedCells.add(el);
+        }
+    });
 
+    if(multiSelectBtn) {
         multiSelectBtn.addEventListener('click', () => {
             multiSelectMode = !multiSelectMode;
             if(multiSelectMode) {
@@ -427,92 +431,93 @@
                 clearSelection();
             }
         });
+    }
 
-        // --- STYLES ---
-        function applyStyle(action, value = null) {
-            pushSnapshot();
-            const targets = selectedCells.size > 0 ? Array.from(selectedCells) : [];
-            
-            if(targets.length === 0 && !value) {
-                // Se não tem seleção específica, tenta aplicar onde o cursor está
-                document.execCommand(action, false, null);
-                return;
-            }
-            
-            targets.forEach(el => {
-                const row = el.dataset.row;
-                const col = el.dataset.col;
-                
-                if(action === 'color') {
-                    el.style.color = value;
-                    if(col === 'time') scheduleData[row].timeColor = value;
-                    else scheduleData[row].color[col] = value;
-                } else if(action === 'background') {
-                    const td = el.closest('td');
-                    if(td) td.style.backgroundColor = value;
-                    if(col === 'time') scheduleData[row].timeBg = value;
-                    else scheduleData[row].bg[col] = value;
-                } else if(action === 'textAlign') {
-                    el.style.textAlign = value;
-                    if(col === 'time') scheduleData[row].timeAlign = value;
-                    else scheduleData[row].align[col] = value;
-                }
-            });
-
-            if(targets.length > 0) {
-                setStatus('saving', 'Salvando estilo...');
-                debouncedSave();
-            } else {
-                 document.execCommand(action);
-            }
+    // --- STYLES ---
+    function applyStyle(action, value = null) {
+        pushSnapshot();
+        const targets = selectedCells.size > 0 ? Array.from(selectedCells) : [];
+        
+        if(targets.length === 0 && !value) {
+            document.execCommand(action, false, null);
+            return;
         }
+        
+        targets.forEach(el => {
+            const row = el.dataset.row;
+            const col = el.dataset.col;
+            
+            if(action === 'color') {
+                el.style.color = value;
+                if(col === 'time') scheduleData[row].timeColor = value;
+                else scheduleData[row].color[col] = value;
+            } else if(action === 'background') {
+                const td = el.closest('td');
+                if(td) td.style.backgroundColor = value;
+                if(col === 'time') scheduleData[row].timeBg = value;
+                else scheduleData[row].bg[col] = value;
+            } else if(action === 'textAlign') {
+                el.style.textAlign = value;
+                if(col === 'time') scheduleData[row].timeAlign = value;
+                else scheduleData[row].align[col] = value;
+            }
+        });
 
-        boldBtn.onclick = () => applyStyle('bold');
-        underlineBtn.onclick = () => applyStyle('underline');
-        applyTextColorBtn.onclick = () => applyStyle('color', textColorPicker.value);
-        applyFillBtn.onclick = () => applyStyle('background', fillColorPicker.value);
-        alignLeftBtn.onclick = () => applyStyle('textAlign', 'left');
-        alignCenterBtn.onclick = () => applyStyle('textAlign', 'center');
-        alignRightBtn.onclick = () => applyStyle('textAlign', 'right');
-        undoBtn.onclick = undo;
-
-        // --- DRAG AND DROP ---
-        function bindDragHandlers() {
-            const handles = scheduleBody.querySelectorAll('.drag-handle');
-            handles.forEach(h => {
-                h.addEventListener('dragstart', (e) => {
-                    dragSrcIndex = Number(e.target.dataset.row);
-                    e.dataTransfer.effectAllowed = 'move';
-                    e.target.closest('tr').classList.add('dragging');
-                });
-                h.addEventListener('dragend', (e) => {
-                    e.target.closest('tr').classList.remove('dragging');
-                    document.querySelectorAll('.drop-target').forEach(r => r.classList.remove('drop-target'));
-                });
-            });
-            scheduleBody.ondragover = (e) => {
-                e.preventDefault();
-                const tr = e.target.closest('tr');
-                if(tr && !tr.classList.contains('dragging')) {
-                    document.querySelectorAll('.drop-target').forEach(r => r.classList.remove('drop-target'));
-                    tr.classList.add('drop-target');
-                }
-            };
-            scheduleBody.ondrop = (e) => {
-                e.preventDefault();
-                const tr = e.target.closest('tr');
-                if(!tr) return;
-                const destIndex = Number(tr.dataset.row);
-                if(dragSrcIndex !== null && dragSrcIndex !== destIndex) {
-                    pushSnapshot();
-                    const item = scheduleData.splice(dragSrcIndex, 1)[0];
-                    scheduleData.splice(destIndex, 0, item);
-                    renderTable(scheduleData);
-                    saveToFirebase();
-                }
-            };
+        if(targets.length > 0) {
+            setStatus('saving', 'Salvando estilo...');
+            debouncedSave();
+        } else {
+             document.execCommand(action);
         }
-    });
+    }
+
+    if(boldBtn) boldBtn.onclick = () => applyStyle('bold');
+    if(underlineBtn) underlineBtn.onclick = () => applyStyle('underline');
+    if(applyTextColorBtn) applyTextColorBtn.onclick = () => applyStyle('color', textColorPicker.value);
+    if(applyFillBtn) applyFillBtn.onclick = () => applyStyle('background', fillColorPicker.value);
+    if(alignLeftBtn) alignLeftBtn.onclick = () => applyStyle('textAlign', 'left');
+    if(alignCenterBtn) alignCenterBtn.onclick = () => applyStyle('textAlign', 'center');
+    if(alignRightBtn) alignRightBtn.onclick = () => applyStyle('textAlign', 'right');
+    if(undoBtn) undoBtn.onclick = undo;
+
+    // --- DRAG AND DROP ---
+    function bindDragHandlers() {
+        const handles = scheduleBody.querySelectorAll('.drag-handle');
+        handles.forEach(h => {
+            h.addEventListener('dragstart', (e) => {
+                dragSrcIndex = Number(e.target.dataset.row);
+                e.dataTransfer.effectAllowed = 'move';
+                e.target.closest('tr').classList.add('dragging');
+            });
+            h.addEventListener('dragend', (e) => {
+                e.target.closest('tr').classList.remove('dragging');
+                document.querySelectorAll('.drop-target').forEach(r => r.classList.remove('drop-target'));
+            });
+        });
+        scheduleBody.ondragover = (e) => {
+            e.preventDefault();
+            const tr = e.target.closest('tr');
+            if(tr && !tr.classList.contains('dragging')) {
+                document.querySelectorAll('.drop-target').forEach(r => r.classList.remove('drop-target'));
+                tr.classList.add('drop-target');
+            }
+        };
+        scheduleBody.ondrop = (e) => {
+            e.preventDefault();
+            const tr = e.target.closest('tr');
+            if(!tr) return;
+            const destIndex = Number(tr.dataset.row);
+            if(dragSrcIndex !== null && dragSrcIndex !== destIndex) {
+                pushSnapshot();
+                const item = scheduleData.splice(dragSrcIndex, 1)[0];
+                scheduleData.splice(destIndex, 0, item);
+                renderTable(scheduleData);
+                saveToFirebase();
+            }
+        };
+    }
+    
+    console.log("✅ Script carregado");
     </script>
     
     <script src="menu.js"></script>
