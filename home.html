@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visão Geral - Sistema de Estudos</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body class="bg-gray-50 text-gray-800 h-screen flex overflow-hidden font-sans">
+
+    <div id="sidebar-container"></div>
+
+    <main class="flex-1 flex flex-col min-w-0 overflow-y-auto">
+        
+        <header class="bg-white border-b border-gray-200 h-16 px-8 flex justify-between items-center shadow-sm sticky top-0 z-20">
+            <div>
+                <h1 class="text-xl font-bold text-gray-800">Visão Geral</h1>
+                <p class="text-xs text-gray-500">Bem-vindo de volta aos estudos</p>
+            </div>
+
+            <div class="flex items-center gap-4">
+                <div class="flex items-center gap-2 bg-sky-50 px-3 py-1.5 rounded-lg border border-sky-100">
+                    <i class="fa-regular fa-clock text-sky-600"></i>
+                    <span id="headerTimer" class="font-mono font-bold text-sky-900 text-lg">25:00</span>
+                    <div class="flex gap-1 ml-2">
+                        <button class="w-6 h-6 flex items-center justify-center bg-sky-600 text-white rounded hover:bg-sky-700 text-xs transition"><i class="fa-solid fa-play"></i></button>
+                        <button class="w-6 h-6 flex items-center justify-center bg-gray-200 text-gray-600 rounded hover:bg-gray-300 text-xs transition"><i class="fa-solid fa-rotate-left"></i></button>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <div class="p-8 max-w-7xl mx-auto w-full space-y-8">
+
+            <div class="bg-white rounded-2xl p-8 shadow-sm border border-gray-200 relative overflow-hidden group">
+                <div class="absolute top-0 right-0 w-64 h-64 bg-sky-50 rounded-bl-full -mr-16 -mt-16 transition group-hover:bg-sky-100"></div>
+
+                <div class="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+                    <div>
+                        <h2 class="text-2xl font-bold text-gray-800 mb-2">Foco na Aprovação!</h2>
+                        <p class="text-gray-500 max-w-lg mb-6">"O segredo do sucesso é a constância no objetivo." Defina a data da sua prova para acompanhar a contagem regressiva.</p>
+                        
+                        <div class="flex items-center gap-3">
+                            <input type="date" id="examDateInput" class="border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-600 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500">
+                            <button id="btnSetDate" class="bg-sky-600 hover:bg-sky-700 text-white px-4 py-2 rounded-lg text-sm font-semibold shadow-md transition transform hover:-translate-y-0.5">
+                                Salvar Data
+                            </button>
+                            <button id="btnClearDate" class="text-gray-400 hover:text-red-500 transition px-2" title="Limpar data">
+                                <i class="fa-solid fa-trash"></i>
+                            </button>
+                        </div>
+                        <p id="feedbackMsg" class="text-xs font-bold mt-2 h-4 transition-colors text-transparent">.</p>
+                    </div>
+
+                    <div class="bg-white/80 backdrop-blur border border-gray-100 rounded-xl p-6 text-center min-w-[200px] shadow-sm">
+                        <div id="countdownDisplay">
+                            <i class="fa-solid fa-circle-notch fa-spin text-sky-500 text-2xl"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <a href="Cronograma.HTML" class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 hover:shadow-md hover:border-sky-300 transition group relative">
+                    <div class="w-12 h-12 rounded-lg bg-sky-50 text-sky-600 flex items-center justify-center mb-4 group-hover:bg-sky-600 group-hover:text-white transition">
+                        <i class="fa-solid fa-calendar-days text-xl"></i>
+                    </div>
+                    <h3 class="text-lg font-bold text-gray-800 mb-1">Cronograma</h3>
+                    <p class="text-sm text-gray-500">Organize sua semana e horários de estudo.</p>
+                </a>
+
+                <a href="index.html" class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 hover:shadow-md hover:border-purple-300 transition group relative">
+                    <div class="w-12 h-12 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center mb-4 group-hover:bg-purple-600 group-hover:text-white transition">
+                        <i class="fa-solid fa-list-check text-xl"></i>
+                    </div>
+                    <h3 class="text-lg font-bold text-gray-800 mb-1">Acompanhamento</h3>
+                    <p class="text-sm text-gray-500">Marque tópicos estudados e revisões.</p>
+                </a>
+
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 hover:shadow-md hover:border-orange-300 transition group relative flex flex-col">
+                    <div class="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition">
+                        <button id="btnEditLink" class="text-gray-400 hover:text-sky-600 bg-white rounded-full p-2 shadow-sm border border-gray-100" title="Editar Link"><i class="fa-solid fa-pen"></i></button>
+                    </div>
+                    
+                    <a href="#" id="linkBancaCard" target="_blank" class="flex-1 block">
+                        <div class="w-12 h-12 rounded-lg bg-orange-50 text-orange-600 flex items-center justify-center mb-4 group-hover:bg-orange-600 group-hover:text-white transition">
+                            <i class="fa-solid fa-globe text-xl"></i>
+                        </div>
+                        <h3 class="text-lg font-bold text-gray-800 mb-1">Site da Banca</h3>
+                        <p class="text-sm text-gray-500">Acesse o edital e página de inscrições.</p>
+                        <p id="linkDisplayUrl" class="text-[10px] text-gray-300 mt-2 truncate">Configurar link...</p>
+                    </a>
+                </div>
+            </div>
+
+            <div class="bg-slate-900 rounded-2xl p-8 text-center relative overflow-hidden">
+                <i class="fa-solid fa-quote-left text-slate-800 text-6xl absolute top-4 left-4"></i>
+                <i class="fa-solid fa-quote-right text-slate-800 text-6xl absolute bottom-4 right-4"></i>
+                
+                <p id="quoteText" class="text-white text-xl italic font-light relative z-10 transition-opacity duration-1000 ease-in-out">
+                    "A persistência é o caminho do êxito."
+                </p>
+                
+                <div class="w-16 h-1 bg-sky-500 mx-auto mt-4 rounded-full relative z-10"></div>
+            </div>
+
+        </div>
+    </main>
+
+    <script type="module">
+        console.log("🚀 Iniciando Home (Firebase)...");
+
+        import { db, auth } from "./firebase-config.js";
+        import { ref, set, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+        import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+
+        // Referências DOM
+        const examDateInput = document.getElementById('examDateInput');
+        const countdownDisplay = document.getElementById('countdownDisplay');
+        const feedbackMsg = document.getElementById('feedbackMsg');
+        const btnSetDate = document.getElementById('btnSetDate');
+        const btnClearDate = document.getElementById('btnClearDate');
+        const linkBancaCard = document.getElementById('linkBancaCard');
+        const linkDisplayUrl = document.getElementById('linkDisplayUrl');
+        const btnEditLink = document.getElementById('btnEditLink');
+
+        let currentUserUID = null;
+        let userConfig = { examDate: '', concursoURL: '' };
+
+        // --- AUTH & LOAD ---
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                currentUserUID = user.uid;
+                console.log("✅ Home: Usuário detectado", user.email);
+                loadConfig();
+            } else {
+                currentUserUID = null;
+                countdownDisplay.innerHTML = '<p class="text-sm text-gray-400">Faça login</p>';
+            }
+        });
+
+        // --- CARREGAR DADOS ---
+        async function loadConfig() {
+            try {
+                const snapshot = await get(ref(db, `users/${currentUserUID}/config`));
+                if (snapshot.exists()) {
+                    userConfig = snapshot.val();
+                } else {
+                    // Tenta migrar do LocalStorage se não existir na nuvem (apenas uma vez)
+                    const localDate = localStorage.getItem('examDate');
+                    const localLink = localStorage.getItem('concursoURL');
+                    if (localDate || localLink) {
+                        if (localDate) userConfig.examDate = localDate;
+                        if (localLink) userConfig.concursoURL = localLink;
+                        saveConfig(true); // Salva na nuvem silenciosamente
+                    }
+                }
+                updateUI();
+            } catch (error) {
+                console.error("Erro ao carregar config:", error);
+            }
+        }
+
+        // --- SALVAR DADOS ---
+        async function saveConfig(silent = false) {
+            if (!currentUserUID) return alert("Faça login para salvar.");
+            
+            try {
+                await set(ref(db, `users/${currentUserUID}/config`), userConfig);
+                if (!silent) showFeedback("Salvo na nuvem!", "text-green-600");
+                updateUI();
+            } catch (error) {
+                console.error("Erro ao salvar:", error);
+                showFeedback("Erro ao salvar.", "text-red-500");
+            }
+        }
+
+        function showFeedback(msg, colorClass) {
+            feedbackMsg.innerText = msg;
+            feedbackMsg.className = `text-xs font-bold mt-2 h-4 transition-colors ${colorClass}`;
+            setTimeout(() => {
+                feedbackMsg.className = "text-xs font-bold mt-2 h-4 transition-colors text-transparent";
+            }, 3000);
+        }
+
+        // --- ATUALIZAR INTERFACE ---
+        function updateUI() {
+            // 1. Data e Countdown
+            if (userConfig.examDate) {
+                examDateInput.value = userConfig.examDate;
+                
+                const targetDate = new Date(userConfig.examDate);
+                const today = new Date();
+                // Zera as horas para comparar apenas datas
+                today.setHours(0,0,0,0);
+                targetDate.setHours(0,0,0,0); // Ajuste para meia-noite do dia da prova
+
+                const diffTime = targetDate - today;
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+
+                if (diffDays < 0) {
+                    countdownDisplay.innerHTML = `
+                        <div class="text-sky-600 font-bold text-4xl mb-1">Passou</div>
+                        <p class="text-sm text-gray-500">A data já passou</p>
+                    `;
+                } else if (diffDays === 0) {
+                     countdownDisplay.innerHTML = `
+                        <div class="text-green-600 font-bold text-4xl mb-1">É Hoje!</div>
+                        <p class="text-sm text-gray-500">Boa sorte!</p>
+                    `;
+                } else {
+                    countdownDisplay.innerHTML = `
+                        <div class="text-sky-600 font-bold text-5xl mb-1">${diffDays}</div>
+                        <p class="text-sm text-gray-500 font-medium">Dias para a prova</p>
+                    `;
+                }
+            } else {
+                examDateInput.value = '';
+                countdownDisplay.innerHTML = `
+                    <i class="fa-regular fa-calendar-xmark text-gray-300 text-4xl mb-2"></i>
+                    <p class="text-sm text-gray-400">Data não definida</p>
+                `;
+            }
+
+            // 2. Link da Banca
+            if (userConfig.concursoURL && userConfig.concursoURL !== '#') {
+                linkBancaCard.href = userConfig.concursoURL;
+                linkDisplayUrl.innerText = userConfig.concursoURL;
+                linkDisplayUrl.className = "text-[10px] text-gray-400 mt-2 truncate";
+            } else {
+                linkBancaCard.href = "#";
+                linkDisplayUrl.innerText = "Nenhum link configurado";
+                linkDisplayUrl.className = "text-[10px] text-red-300 mt-2 truncate";
+            }
+        }
+
+        // --- EVENTOS ---
+        btnSetDate.addEventListener('click', () => {
+            const val = examDateInput.value;
+            if (!val) return alert("Selecione uma data válida.");
+            userConfig.examDate = val;
+            saveConfig();
+        });
+
+        btnClearDate.addEventListener('click', () => {
+            if(confirm("Remover data da prova?")) {
+                userConfig.examDate = "";
+                saveConfig();
+            }
+        });
+
+        btnEditLink.addEventListener('click', (e) => {
+            e.preventDefault(); // Não abrir o link ao editar
+            const current = userConfig.concursoURL || "";
+            const newUrl = prompt("Cole o link do site da banca/concurso:", current);
+            if (newUrl !== null) {
+                userConfig.concursoURL = newUrl.trim();
+                saveConfig();
+            }
+        });
+
+        // Lógica de Frases (Mantida)
+        const frases = [
+            "A persistência é o caminho do êxito.", "Cada página lida é um passo rumo à aprovação.",
+            "Disciplina é o que transforma sonhos em conquistas.", "Você é capaz de muito mais do que imagina.",
+            "O esforço de hoje é a vitória de amanhã.", "Mente focada, objetivo alcançado.",
+            "Não espere pela motivação, crie-a com ação.", "Estudar é plantar, e o futuro é a colheita.",
+            "Aprender exige dedicação, mas recompensa é garantida.", "Pequenos passos consistentes levam a grandes resultados."
+        ];
+        let indiceAtual = 0;
+        const elementoFrase = document.getElementById('quoteText');
+        if(elementoFrase) {
+            setInterval(() => {
+                elementoFrase.classList.add('opacity-0');
+                setTimeout(() => {
+                    indiceAtual = (indiceAtual + 1) % frases.length;
+                    elementoFrase.innerText = `"${frases[indiceAtual]}"`;
+                    elementoFrase.classList.remove('opacity-0');
+                }, 1000); 
+            }, 6000);
+        }
+    </script>
+    
+    <script src="menu.js"></script>
+</body>
+</html>
