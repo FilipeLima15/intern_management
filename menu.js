@@ -1,4 +1,4 @@
-// menu.js - Gerador da Sidebar Global e Funcionalidades Universais
+// menu.js - Gerador da Sidebar Global (Versão Raiz Unificada)
 
 document.addEventListener("DOMContentLoaded", function() {
     
@@ -6,33 +6,27 @@ document.addEventListener("DOMContentLoaded", function() {
     const sidebarContainer = document.getElementById('sidebar-container');
     if (!sidebarContainer) return;
 
-    // 2. Lógica de Caminhos
-    // Verifica se estamos dentro da pasta 'outros'
-    const inSubfolder = window.location.pathname.includes('/outros/');
-
-    // Prefixo para voltar para a raiz (se estiver na subpasta, usa "../", senão usa nada)
-    const toRoot = inSubfolder ? '../' : '';       
-    
-    // Prefixo para entrar na pasta (se estiver na raiz, usa "outros/", senão usa nada)
-    const toFolder = inSubfolder ? '' : 'outros/'; 
-
-    // Links do sistema corrigidos
+    // 2. Links do sistema (Tudo na raiz, sem prefixos)
     const links = {
-        home: toRoot + 'home.html',
-        cronograma: toRoot + 'Cronograma.HTML',
-        acompanhamento: toRoot + 'index.html',
-        jurisprudencia: toRoot + 'jurisprudencia.html',
-        charts: toRoot + 'charts.html', // Caminho correto para o gráfico
+        home: 'home.html',
+        cronograma: 'Cronograma.HTML',
+        acompanhamento: 'index.html',
+        jurisprudencia: 'jurisprudencia.html',
+        charts: 'charts.html',
         concurso: localStorage.getItem("concursoURL") || "#"
     };
 
     // 3. Detectar Página Ativa
     const currentPath = window.location.pathname;
     const isActive = (key) => {
-        if (key === 'home' && (currentPath.endsWith('home.html') || currentPath.endsWith('/') || (currentPath.endsWith('index.html') && !inSubfolder))) return true;
+        // Acompanhamento é o index.html (ou a raiz /)
+        if (key === 'acompanhamento' && (currentPath.endsWith('index.html') || currentPath.endsWith('/'))) return true;
+        
+        // Outras páginas
+        if (key === 'home' && currentPath.includes('home.html')) return true;
         if (key === 'cronograma' && currentPath.includes('Cronograma')) return true;
-        if (key === 'acompanhamento' && currentPath.includes('index.html') && inSubfolder) return true;
         if (key === 'jurisprudencia' && currentPath.includes('jurisprudencia')) return true;
+        
         return false;
     };
 
@@ -85,11 +79,10 @@ document.addEventListener("DOMContentLoaded", function() {
     // 5. Injetar na página
     sidebarContainer.innerHTML = sidebarHTML;
 
-    // 6. FUNÇÃO DO MODAL DE GRÁFICOS (Definida aqui para funcionar em todas as páginas)
+    // 6. FUNÇÃO DO MODAL DE GRÁFICOS
     function openChartsOverlay() {
         if (document.getElementById('chartsOverlay')) return;
 
-        // Cria o fundo do modal
         const overlay = document.createElement('div');
         overlay.id = 'chartsOverlay';
         overlay.style.cssText = `
@@ -99,7 +92,6 @@ document.addEventListener("DOMContentLoaded", function() {
             padding: 20px; backdrop-filter: blur(3px);
         `;
         
-        // Cria o container branco
         const frameWrap = document.createElement('div');
         frameWrap.style.cssText = `
             width: 100%; max-width: 1200px; height: 90%; 
@@ -109,13 +101,11 @@ document.addEventListener("DOMContentLoaded", function() {
             box-shadow: 0 20px 50px rgba(0,0,0,0.2);
         `;
         
-        // Cria o iframe apontando para o link correto
         const iframe = document.createElement('iframe');
         iframe.id = 'chartsIframe'; 
-        iframe.src = links.charts; // Usa o link calculado lá em cima
+        iframe.src = links.charts; 
         iframe.style.cssText = 'width: 100%; height: 100%; border: 0; display: block; background: #fff;';
         
-        // Botão de fechar manual (X)
         const closeBtn = document.createElement('button');
         closeBtn.innerHTML = '&times;';
         closeBtn.style.cssText = `
@@ -125,17 +115,14 @@ document.addEventListener("DOMContentLoaded", function() {
         `;
         closeBtn.onclick = () => overlay.remove();
 
-        // Monta o modal
         frameWrap.appendChild(closeBtn);
         frameWrap.appendChild(iframe);
         overlay.appendChild(frameWrap);
         
-        // Fecha ao clicar fora
         overlay.onclick = (ev) => { if (ev.target === overlay) overlay.remove(); };
 
         document.body.appendChild(overlay);
 
-        // Ouve mensagem para fechar (caso venha de dentro do iframe)
         window.addEventListener('message', function(event) {
             if (event.data && event.data.action === 'closeChartsOverlay') {
                 overlay.remove();
@@ -143,7 +130,6 @@ document.addEventListener("DOMContentLoaded", function() {
         }, { once: true });
     }
 
-    // 7. Adiciona o evento de clique no botão
     const btnCharts = document.getElementById('btnChartsMenu');
     if(btnCharts) {
         btnCharts.addEventListener('click', (e) => {
