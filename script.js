@@ -12,17 +12,15 @@ import {
 ///////////////////////////
 
 const DEFAULT_SUBJECTS = {
-  "Direito Tributário": [
-    "1 Tributo: conceito e espécies", "2 Obrigação tributária", "3 Crédito tributário", "4 Administração tributária"
+  "Matéria 1": [
+    "1 - contéudo", "2 -contéudo"
   ],
-  "Direito Urbanístico": [
-    "1 Planejamento urbano", "2 Zoneamento", "3 Licenças e regularizações"
+  "Matéria 2": [
+    "1 - contéudo", "2 -contéudo"
   ],
-  "Legislação": ["1 Leis gerais","2 Regulamentos","3 Portarias"],
-  "Direito Administrativo": ["1 Administração pública","2 Poderes administrativos","3 Atos administrativos"],
-  "Direito Constitucional": ["1 Direitos e garantias fundamentais","2 Organização do Estado","3 Controle de constitucionalidade"],
-  "Direito Financeiro": ["1 Orçamento público","2 Receitas e despesas","3 Lei de Responsabilidade Fiscal"],
-  "Direito Civil": ["1 Pessoa natural","2 Obrigações","3 Contratos"]
+  "Matéria 3": [
+    "1 - contéudo", "2 -contéudo"
+  ]
 };
 
 ///////////////////////////

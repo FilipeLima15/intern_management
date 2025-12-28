@@ -166,20 +166,21 @@
         </div>
     </div>
 
-    <script>
-        // === BANCOS DE DADOS INDEPENDENTES ===
-        const databases = {
-            'informativos': JSON.parse(localStorage.getItem('db_informativos')) || { 'STF': {}, 'STJ': {} },
-            'sumulas': JSON.parse(localStorage.getItem('db_sumulas')) || { 'STF - Vinculante': {}, 'STF': {}, 'STJ': {} },
-            'repetitivos': JSON.parse(localStorage.getItem('db_repetitivos')) || { 'STF': {}, 'STJ': {} },
-            'ojs': JSON.parse(localStorage.getItem('db_ojs')) || { 'TST': {} },
-            'jur-teses': JSON.parse(localStorage.getItem('db_jur_teses')) || { 'STJ': {} }
+<script type="module">
+        import { db } from "./firebase-config.js";
+        import { currentUser } from "./auth.js";
+        import { ref, set, get, child } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+        // === ESTADO GLOBAL ===
+        let databases = {
+            'informativos': { 'STF': {}, 'STJ': {} },
+            'sumulas': { 'STF - Vinculante': {}, 'STF': {}, 'STJ': {} },
+            'repetitivos': { 'STF': {}, 'STJ': {} },
+            'ojs': { 'TST': {} },
+            'jur-teses': { 'STJ': {} }
         };
-
-        // Leituras unificadas
-        let leituras = JSON.parse(localStorage.getItem('jurisprudencia_lidos_niveis')) || {};
-
-        // ESTADO GLOBAL
+        
+        let leituras = {};
         let currentMode = 'informativos'; 
         let tribunalAtual = 'STF';
         let anoAtual = new Date().getFullYear().toString();
@@ -193,15 +194,101 @@
             'jur-teses': 'JUR. TESES'
         };
 
+        // Torna funções acessíveis globalmente (para o HTML onclick funcionar com type="module")
+        window.mudarModo = mudarModo;
+        window.mudarAno = mudarAno;
+        window.abrirModal = abrirModal;
+        window.fecharModal = fecharModal;
+        window.switchModalTab = switchModalTab;
+        window.salvarDados = salvarDados;
+        window.executarReset = executarReset;
+        window.criarTribunal = criarTribunal;
+        window.mudarTribunal = mudarTribunal; // Adicionado para corrigir navegação
+
+        // === 1. CONEXÃO FIREBASE ===
+
+        // Função auxiliar para pegar referência do usuário
+        function getUserRef(path) {
+            if(!currentUser) return null;
+            return ref(db, `users/${currentUser.uid}/jurisprudencia/${path}`);
+        }
+
+        // Carregar dados do Firebase
+        async function carregarDadosFirebase() {
+            if (!currentUser) return;
+
+            // Mostra carregando (opcional, visual simples)
+            document.getElementById('gridContainer').innerHTML = '<div class="col-span-full text-center py-10"><i class="fa-solid fa-circle-notch fa-spin text-sky-500 text-3xl"></i><p class="mt-2 text-gray-400">Sincronizando com a nuvem...</p></div>';
+
+            try {
+                const userRoot = ref(db, `users/${currentUser.uid}/jurisprudencia`);
+                const snapshot = await get(userRoot);
+                
+                if (snapshot.exists()) {
+                    const data = snapshot.val();
+                    // Mescla o que veio do banco com a estrutura padrão para evitar erros
+                    if(data.databases) databases = { ...databases, ...data.databases };
+                    if(data.leituras) leituras = data.leituras;
+                }
+                
+                // Inicializa a interface após carregar
+                renderTribunalTabs();
+                carregarAnosNoSelect();
+                gerarGrid();
+                
+            } catch (error) {
+                console.error("Erro ao baixar dados:", error);
+                alert("Erro ao sincronizar dados. Verifique sua conexão.");
+            }
+        }
+
+        // Salvar Banco de Dados (Estrutura)
+        async function salvarDb() {
+            if(!currentUser) return alert("Você precisa estar logado para salvar.");
+            
+            // Salva apenas a categoria atual para economizar dados, ou o objeto todo
+            // Aqui salvaremos o objeto databases inteiro dentro de 'databases'
+            try {
+                await set(getUserRef('databases'), databases);
+                renderTribunalTabs(); 
+                carregarAnosNoSelect(); 
+                gerarGrid(); 
+            } catch (e) {
+                console.error("Erro ao salvar DB:", e);
+            }
+        }
+
+        // Salvar Leituras (Status de lido/nível)
+        async function salvarLeituras() { 
+            if(!currentUser) return;
+            try {
+                await set(getUserRef('leituras'), leituras);
+                gerarGrid();
+            } catch (e) {
+                console.error("Erro ao salvar leituras:", e);
+            }
+        }
+
+        // === EVENTO DE LOGIN (Gatilho Inicial) ===
+        window.addEventListener('auth-ready', (event) => {
+            // O auth.js disparou que o usuário está pronto
+            console.log("Auth detectado na Jurisprudência. Carregando...");
+            carregarDadosFirebase();
+        });
+
+
+        // === LÓGICA ORIGINAL ADAPTADA ===
+
         function init() {
             // Garante que "STF - Vinculante" exista em súmulas
             if (!databases['sumulas']['STF - Vinculante']) {
                 databases['sumulas']['STF - Vinculante'] = {};
             }
-            mudarModo('informativos');
+            // A renderização inicial será chamada após o auth-ready
+            // Apenas configura a UI básica
+            document.getElementById(`nav-${currentMode}`).classList.add('active');
         }
 
-        // --- SISTEMA DE MODOS ---
         function mudarModo(modo) {
             currentMode = modo;
             
@@ -210,13 +297,11 @@
             document.getElementById(`nav-${modo}`).classList.add('active');
             
             // Define o tribunal inicial com base na prioridade
-            const dbAtual = databases[currentMode];
+            const dbAtual = databases[currentMode] || {};
             const keys = Object.keys(dbAtual);
             
-            // Lógica de Prioridade para Seleção Inicial
             const priority = ['STF - Vinculante', 'STF', 'STJ', 'TST'];
             
-            // Tenta achar o primeiro da lista de prioridade que existe no banco
             let found = false;
             for(let p of priority) {
                 if(dbAtual[p]) {
@@ -226,11 +311,11 @@
                 }
             }
             
-            // Se não achou nenhum prioritário, pega o primeiro que tiver
             if(!found && keys.length > 0) {
                 tribunalAtual = keys[0];
             } else if (!found) {
-                tribunalAtual = '';
+                // Se não tiver tribunal, mantemos um padrão ou vazio
+                tribunalAtual = (keys.length > 0) ? keys[0] : 'STF';
             }
             
             renderTribunalTabs();
@@ -238,89 +323,80 @@
             gerarGrid();
         }
 
-        // --- PERSISTÊNCIA ---
-        function salvarDb() {
-            const key = `db_${currentMode}`;
-            localStorage.setItem(key, JSON.stringify(databases[currentMode]));
-            renderTribunalTabs(); carregarAnosNoSelect(); gerarGrid(); 
-        }
-        function salvarLeituras() { 
-            localStorage.setItem('jurisprudencia_lidos_niveis', JSON.stringify(leituras)); 
-            gerarGrid(); 
-        }
-
-        // --- MANIPULAÇÃO DE DADOS ---
         function criarTribunal() {
             const novoNome = document.getElementById('inputNewTribunalName').value.trim().toUpperCase();
             if(!novoNome) return alert("Digite o nome do tribunal.");
             if(databases[currentMode][novoNome]) return alert("Este tribunal já existe nesta aba.");
             
             databases[currentMode][novoNome] = {}; 
-            salvarDb();
+            salvarDb(); // Agora salva no Firebase
+            
             tribunalAtual = novoNome; 
-            renderTribunalTabs(); carregarAnosNoSelect(); gerarGrid();
-            document.getElementById('inputNewTribunalName').value = ''; fecharModal();
+            document.getElementById('inputNewTribunalName').value = ''; 
+            fecharModal();
         }
 
         function adicionarUnico(tribunal, ano, numero) {
             if (!numero || !ano || !tribunal) return alert("Preencha todos os dados!");
-            const db = databases[currentMode];
-            if (!db[tribunal]) db[tribunal] = {};
-            if (!db[tribunal][ano]) db[tribunal][ano] = [];
+            const dbRef = databases[currentMode];
+            if (!dbRef[tribunal]) dbRef[tribunal] = {};
+            if (!dbRef[tribunal][ano]) dbRef[tribunal][ano] = [];
             
-            if (!db[tribunal][ano].includes(parseInt(numero))) {
-                db[tribunal][ano].push(parseInt(numero)); 
-                db[tribunal][ano].sort((a, b) => b - a);
+            if (!dbRef[tribunal][ano].includes(parseInt(numero))) {
+                dbRef[tribunal][ano].push(parseInt(numero)); 
+                dbRef[tribunal][ano].sort((a, b) => b - a);
                 tribunalAtual = tribunal; anoAtual = ano; 
-                salvarDb(); return true;
+                salvarDb(); // Salva no Firebase
+                return true;
             } else { alert(`Item ${numero} já existe!`); return false; }
         }
 
         function adicionarFaixa(tribunal, ano, inicio, fim) {
             if (!inicio || !fim || !ano || !tribunal) return alert("Preencha todos os dados!");
             if (parseInt(inicio) > parseInt(fim)) { let temp = inicio; inicio = fim; fim = temp; }
-            const db = databases[currentMode];
-            if (!db[tribunal]) db[tribunal] = {};
-            if (!db[tribunal][ano]) db[tribunal][ano] = [];
+            const dbRef = databases[currentMode];
+            if (!dbRef[tribunal]) dbRef[tribunal] = {};
+            if (!dbRef[tribunal][ano]) dbRef[tribunal][ano] = [];
             
             let count = 0; 
             for (let i = parseInt(inicio); i <= parseInt(fim); i++) { 
-                if (!db[tribunal][ano].includes(i)) { db[tribunal][ano].push(i); count++; } 
+                if (!dbRef[tribunal][ano].includes(i)) { dbRef[tribunal][ano].push(i); count++; } 
             }
             if(count > 0) { 
-                db[tribunal][ano].sort((a, b) => b - a); 
+                dbRef[tribunal][ano].sort((a, b) => b - a); 
                 tribunalAtual = tribunal; anoAtual = ano; 
-                salvarDb(); alert(`${count} itens adicionados!`); return true; 
+                salvarDb(); // Salva no Firebase
+                alert(`${count} itens adicionados!`); return true; 
             } else { alert("Nenhum novo item."); return false; }
         }
 
-        // --- ID E EXCLUSÃO ---
         function getId(num) {
             if (currentMode === 'informativos') return `${tribunalAtual}-${num}`;
             return `${currentMode}-${tribunalAtual}-${num}`;
         }
 
-        function excluirItem(tribunal, ano, numero, event) {
+        // Funções anexadas ao window para o HTML acessar
+        window.excluirItem = function(tribunal, ano, numero, event) {
             event.stopPropagation();
             if (confirm(`Excluir ${cardTitles[currentMode]} ${numero}?`)) {
                 databases[currentMode][tribunal][ano] = databases[currentMode][tribunal][ano].filter(n => n !== numero);
                 const idLeitura = (currentMode === 'informativos') ? `${tribunal}-${numero}` : `${currentMode}-${tribunal}-${numero}`;
                 if (leituras[idLeitura]) delete leituras[idLeitura];
-                salvarLeituras(); salvarDb();
+                salvarLeituras(); // Firebase
+                salvarDb(); // Firebase
             }
         }
 
-        function resetarLeitura(id, event) {
+        window.resetarLeitura = function(id, event) {
             event.stopPropagation();
             if(confirm("Zerar a leitura deste item?")) { delete leituras[id]; salvarLeituras(); }
         }
 
-        function excluirTribunal(nome, event) {
+        window.excluirTribunal = function(nome, event) {
             event.stopPropagation();
             if(confirm(`Excluir tribunal "${nome}" e todos os seus itens desta aba?`)) {
                 delete databases[currentMode][nome];
-                // Recalcula tribunal atual após excluir
-                mudarModo(currentMode); // Reusa a lógica de seleção de prioridade
+                mudarModo(currentMode); 
                 salvarDb();
             }
         }
@@ -330,28 +406,29 @@
             const anoAlvo = document.getElementById('inputAno').value;
             if(!tribunalAlvo || !anoAlvo) return alert("Selecione Tribunal e Ano.");
             
-            const db = databases[currentMode];
-            if(!db[tribunalAlvo] || !db[tribunalAlvo][anoAlvo]) return alert("Não existem itens para este período.");
+            const dbRef = databases[currentMode];
+            if(!dbRef[tribunalAlvo] || !dbRef[tribunalAlvo][anoAlvo]) return alert("Não existem itens para este período.");
             
             if(confirm(`ATENÇÃO: Resetar leitura de TODOS os itens do ${tribunalAlvo} em ${anoAlvo}?`)) {
-                const lista = db[tribunalAlvo][anoAlvo]; 
+                const lista = dbRef[tribunalAlvo][anoAlvo]; 
                 let count = 0;
                 lista.forEach(num => { 
                     const id = (currentMode === 'informativos') ? `${tribunalAlvo}-${num}` : `${currentMode}-${tribunalAlvo}-${num}`;
                     if(leituras[id]) { delete leituras[id]; count++; } 
                 });
-                salvarLeituras(); fecharModal();
+                salvarLeituras(); 
+                fecharModal();
                 if(tribunalAtual === tribunalAlvo && anoAtual === anoAlvo) gerarGrid();
                 alert(`Leituras resetadas: ${count}`);
             }
         }
 
-        // --- LÓGICA DE REVISÃO ---
-        function setarNivel(id, nivelAlvo) {
+        window.setarNivel = function(id, nivelAlvo) {
             if (navigator.vibrate) navigator.vibrate(20);
             leituras[id] = nivelAlvo; salvarLeituras();
         }
-        function inputNivelPersonalizado(id, event) {
+        
+        window.inputNivelPersonalizado = function(id, event) {
             event.stopPropagation();
             const valorAtual = leituras[id] || 0;
             const input = prompt("Quantas vezes você leu este item?", valorAtual > 3 ? valorAtual : "");
@@ -362,42 +439,28 @@
             }
         }
 
-        // --- INTERFACE (ORDENAÇÃO FORÇADA AQUI) ---
+        // --- RENDERIZAÇÃO ---
         function renderTribunalTabs() { 
             const container = document.getElementById('courtTabsContainer'); container.innerHTML = '';
-            const db = databases[currentMode];
+            const dbRef = databases[currentMode] || {};
             
-            // 1. Pega todas as chaves (Tribunais)
-            let keys = Object.keys(db);
-            
-            // 2. Define a ordem de prioridade
+            let keys = Object.keys(dbRef);
             const priority = ['STF - Vinculante', 'STF', 'STJ', 'TST'];
             
-            // 3. Ordena o array de chaves
             keys.sort((a, b) => {
                 const idxA = priority.indexOf(a);
                 const idxB = priority.indexOf(b);
-                
-                // Se ambos estão na lista de prioridade, ordena pela posição na lista
                 if (idxA !== -1 && idxB !== -1) return idxA - idxB;
-                
-                // Se só A está na lista, A vem primeiro
                 if (idxA !== -1) return -1;
-                
-                // Se só B está na lista, B vem primeiro
                 if (idxB !== -1) return 1;
-                
-                // Se nenhum está, ordem alfabética
                 return a.localeCompare(b);
             });
 
-            // 4. Gera os botões na ordem correta
             keys.forEach(nome => {
                 const btn = document.createElement('button'); const isActive = nome === tribunalAtual;
                 btn.className = isActive ? "px-4 py-2 rounded-xl text-sm font-bold shadow-sm bg-white text-sky-700 transition whitespace-nowrap flex items-center border border-gray-200/50" : "px-4 py-2 rounded-xl text-sm font-medium text-gray-500 hover:text-gray-700 transition whitespace-nowrap flex items-center hover:bg-white/60 border border-transparent";
                 btn.onclick = () => mudarTribunal(nome); btn.innerHTML = `<span>${nome}</span>`;
                 
-                // Lista de tribunais protegidos contra exclusão
                 const protectedCourts = ['STF', 'STJ', 'TST', 'STF - Vinculante'];
                 
                 if (!protectedCourts.includes(nome)) { 
@@ -410,17 +473,28 @@
 
         function carregarAnosNoSelect() { 
             const select = document.getElementById('anoSelect'); 
-            const db = databases[currentMode];
-            if(!db || !db[tribunalAtual]) { select.innerHTML = ''; return; }
+            const dbRef = databases[currentMode];
+            if(!dbRef || !dbRef[tribunalAtual]) { 
+                select.innerHTML = '<option value="">-</option>'; 
+                return; 
+            }
             
-            const anosExistentes = Object.keys(db[tribunalAtual]).sort((a, b) => b - a);
-            if (anosExistentes.length === 0 && !anosExistentes.includes(anoAtual)) anosExistentes.push(anoAtual);
+            const anosExistentes = Object.keys(dbRef[tribunalAtual]).sort((a, b) => b - a);
+            // Se não tiver anos, mas for o ano atual, garante que ele apareça se a lista estiver vazia
+            if (anosExistentes.length === 0 && !anosExistentes.includes(anoAtual)) {
+                // Não força push no array para não bugar a logica de salvar vazio
+            }
             
             select.innerHTML = ''; 
-            anosExistentes.forEach(ano => { 
-                const opt = document.createElement('option'); opt.value = ano; opt.text = ano; 
-                if (ano == anoAtual) opt.selected = true; select.appendChild(opt); 
-            }); 
+            if(anosExistentes.length === 0) {
+                 const opt = document.createElement('option'); opt.value = anoAtual; opt.text = anoAtual; select.appendChild(opt);
+            } else {
+                anosExistentes.forEach(ano => { 
+                    const opt = document.createElement('option'); opt.value = ano; opt.text = ano; 
+                    if (ano == anoAtual) opt.selected = true; select.appendChild(opt); 
+                }); 
+            }
+            
             if(select.value) anoAtual = select.value;
         }
 
@@ -429,9 +503,11 @@
 
         function gerarGrid() {
             const container = document.getElementById('gridContainer'); container.innerHTML = '';
-            const db = databases[currentMode];
-            if(!db[tribunalAtual]) db[tribunalAtual] = {};
-            const listaItens = db[tribunalAtual][anoAtual] || [];
+            const dbRef = databases[currentMode];
+            if(!dbRef) return;
+            if(!dbRef[tribunalAtual]) dbRef[tribunalAtual] = {};
+            
+            const listaItens = dbRef[tribunalAtual][anoAtual] || [];
 
             document.getElementById('labelProgress').innerText = `Progresso (${cardTitles[currentMode]})`;
             document.getElementById('modalTitle').innerText = `Gerenciar ${cardTitles[currentMode]}`;
@@ -457,15 +533,10 @@
                 const card = document.createElement('div');
                 card.className = `info-card rounded-[2rem] flex flex-col items-center justify-between relative group h-[190px]`;
 
-                const btnDel = document.createElement('button');
-                btnDel.className = "card-action-btn btn-delete-card"; btnDel.title = "Excluir"; btnDel.innerHTML = '<i class="fa-solid fa-trash-can"></i>';
-                btnDel.onclick = (e) => excluirItem(tribunalAtual, anoAtual, num, e);
-
-                const btnReset = document.createElement('button');
-                btnReset.className = "card-action-btn btn-reset-card"; btnReset.title = "Zerar Leitura"; btnReset.innerHTML = '<i class="fa-solid fa-rotate-left"></i>';
-                btnReset.onclick = (e) => resetarLeitura(id, e);
-
-                const infoContent = `
+                // Botões de ação direta precisam chamar window.Function por causa do module
+                card.innerHTML = `
+                    <button class="card-action-btn btn-delete-card" title="Excluir" onclick="excluirItem('${tribunalAtual}', '${anoAtual}', ${num}, event)"><i class="fa-solid fa-trash-can"></i></button>
+                    <button class="card-action-btn btn-reset-card" title="Zerar Leitura" onclick="resetarLeitura('${id}', event)"><i class="fa-solid fa-rotate-left"></i></button>
                     <div class="card-header-bar w-full text-[10px] uppercase tracking-widest text-gray-400 font-bold py-2.5">${cardTitles[currentMode]}</div>
                     <div class="text-center flex-1 flex flex-col justify-center pb-2">
                         <span class="info-num text-5xl font-extrabold ${textColorClass} leading-tight tracking-tight drop-shadow-sm">${num}</span>
@@ -497,8 +568,7 @@
                 btnCustom.onclick = (e) => inputNivelPersonalizado(id, e);
                 revContainer.appendChild(btnCustom);
 
-                card.innerHTML = infoContent;
-                card.appendChild(btnDel); card.appendChild(btnReset); card.appendChild(revContainer);
+                card.appendChild(revContainer);
                 container.appendChild(card);
             });
             atualizarProgresso(lidosCount, listaItens.length);
@@ -518,9 +588,9 @@
             document.getElementById('configModal').classList.remove('hidden');
             document.getElementById('inputAno').value = anoAtual;
             const select = document.getElementById('inputTribunalSelect'); select.innerHTML = '';
-            // No modal, a ordem não precisa ser forçada, mas é bom para consistência
-            const db = databases[currentMode];
-            let keys = Object.keys(db);
+            
+            const dbRef = databases[currentMode];
+            let keys = Object.keys(dbRef);
             const priority = ['STF - Vinculante', 'STF', 'STJ', 'TST'];
             keys.sort((a, b) => {
                 const idxA = priority.indexOf(a); const idxB = priority.indexOf(b);
@@ -572,7 +642,10 @@
             else { const start = document.getElementById('inputNumStart').value; const end = document.getElementById('inputNumEnd').value; sucesso = adicionarFaixa(tribunalAlvo, ano, start, end); }
             if(sucesso) { fecharModal(); document.getElementById('inputNumSingle').value = ''; document.getElementById('inputNumStart').value = ''; document.getElementById('inputNumEnd').value = ''; }
         }
+
+        // Inicializa estrutura básica
         init();
+
     </script>
     
     <script src="menu.js"></script>
