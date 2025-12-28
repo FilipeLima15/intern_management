@@ -166,10 +166,10 @@
         </div>
     </div>
 
-<script type="module">
-        console.log("🚀 Iniciando Script Jurisprudência...");
+    <script type="module">
+        console.log("🚀 Iniciando Script Jurisprudência Completo...");
 
-        // 1. IMPORTS (Devem ficar sempre no topo)
+        // 1. IMPORTS
         import { db, auth } from "./firebase-config.js";
         import { ref, set, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
         import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
@@ -197,18 +197,22 @@
             'jur-teses': 'JUR. TESES'
         };
 
-        // 3. MONITORAMENTO DE AUTENTICAÇÃO
+        // 3. MONITORAMENTO DE LOGIN
         onAuthStateChanged(auth, (user) => {
             if (user) {
-                console.log("✅ Usuário Autenticado:", user.email);
+                console.log("✅ Usuário Identificado:", user.email);
                 currentUserUID = user.uid;
-                // Atualiza a interface imediatamente
-                document.getElementById('gridContainer').innerHTML = '<div class="col-span-full text-center py-10"><i class="fa-solid fa-circle-notch fa-spin text-sky-500 text-3xl"></i><p class="mt-2 text-gray-400">Carregando seus dados...</p></div>';
+                
+                // Exibe loader
+                const container = document.getElementById('gridContainer');
+                if(container) container.innerHTML = '<div class="col-span-full text-center py-10"><i class="fa-solid fa-circle-notch fa-spin text-sky-500 text-3xl"></i><p class="mt-2 text-gray-400">Sincronizando dados...</p></div>';
+                
                 carregarDadosFirebase();
             } else {
                 console.warn("⚠️ Nenhum usuário logado.");
                 currentUserUID = null;
-                document.getElementById('gridContainer').innerHTML = '<div class="col-span-full text-center py-10 text-gray-400">Faça login para gerenciar seus estudos.</div>';
+                const container = document.getElementById('gridContainer');
+                if(container) container.innerHTML = '<div class="col-span-full text-center py-10 text-gray-400">Faça login para acessar.</div>';
             }
         });
 
@@ -225,27 +229,33 @@
                 if (snapshot.exists()) {
                     const data = snapshot.val();
                     if(data.databases) databases = data.databases;
-                    // Garante inicialização de objetos vazios se não existirem
+                    
+                    // Inicialização de segurança
                     if(!databases['informativos']) databases['informativos'] = { 'STF': {}, 'STJ': {} };
+                    if(!databases['sumulas']) databases['sumulas'] = { 'STF - Vinculante': {}, 'STF': {}, 'STJ': {} };
+                    
                     if(data.leituras) leituras = data.leituras;
                 }
-                init(); // Renderiza a tela
+                init(); 
             } catch (error) {
-                console.error("Erro ao carregar:", error);
-                alert("Erro de conexão com o banco de dados.");
+                console.error("Erro no carregamento:", error);
+                alert("Erro ao conectar com o banco de dados.");
             }
         }
 
         async function salvarDb() {
-            if(!currentUserUID) return alert("Erro: Usuário desconectado.");
+            if(!currentUserUID) return alert("Você precisa estar logado.");
             try {
                 await set(getUserRef('databases'), databases);
-                console.log("💾 Banco salvo na nuvem!");
+                console.log("💾 Estrutura salva.");
+                
+                // Atualiza a tela
                 renderTribunalTabs();
                 carregarAnosNoSelect();
                 gerarGrid();
             } catch (e) {
                 console.error("Erro ao salvar DB:", e);
+                alert("Erro ao salvar dados.");
             }
         }
 
@@ -253,24 +263,20 @@
             if(!currentUserUID) return;
             try {
                 await set(getUserRef('leituras'), leituras);
-                console.log("👁️ Leituras salvas!");
-                gerarGrid();
+                gerarGrid(); // Atualiza cores
             } catch (e) { console.error("Erro ao salvar leituras:", e); }
         }
 
-        // 5. FUNÇÕES DE LÓGICA (CORE)
+        // 5. FUNÇÕES LÓGICAS E DE INTERFACE
         function init() {
-            // Garante estrutura mínima
-            if (!databases['sumulas']) databases['sumulas'] = {};
-            if (!databases['sumulas']['STF - Vinculante']) databases['sumulas']['STF - Vinculante'] = {};
             mudarModo(currentMode);
         }
 
         function mudarModo(modo) {
             currentMode = modo;
             document.querySelectorAll('.nav-tab').forEach(btn => btn.classList.remove('active'));
-            const btn = document.getElementById(`nav-${modo}`);
-            if(btn) btn.classList.add('active');
+            const activeBtn = document.getElementById(`nav-${modo}`);
+            if(activeBtn) activeBtn.classList.add('active');
             
             const dbRef = databases[currentMode] || {};
             const keys = Object.keys(dbRef);
@@ -294,18 +300,18 @@
             if(!novoNome) return alert("Digite o nome.");
             
             if(!databases[currentMode]) databases[currentMode] = {};
-            if(databases[currentMode][novoNome]) return alert("Já existe.");
+            if(databases[currentMode][novoNome]) return alert("Tribunal já existe.");
             
             databases[currentMode][novoNome] = {};
             salvarDb();
             
             tribunalAtual = novoNome;
             el.value = '';
-            fecharModal();
+            window.fecharModal();
         }
 
         function adicionarUnico(tribunal, ano, numero) {
-            if (!numero || !ano || !tribunal) return alert("Preencha tudo.");
+            if (!numero || !ano || !tribunal) return alert("Preencha todos os campos.");
             const dbRef = databases[currentMode];
             if (!dbRef[tribunal]) dbRef[tribunal] = {};
             if (!dbRef[tribunal][ano]) dbRef[tribunal][ano] = [];
@@ -318,13 +324,13 @@
                 salvarDb();
                 return true;
             } else {
-                alert("Já existe!"); return false;
+                alert("Item já existe."); return false;
             }
         }
 
         function adicionarFaixa(tribunal, ano, inicio, fim) {
             let i = parseInt(inicio), f = parseInt(fim);
-            if (!i || !f || !ano || !tribunal) return alert("Preencha tudo.");
+            if (!i || !f || !ano || !tribunal) return alert("Preencha todos os campos.");
             if (i > f) [i, f] = [f, i];
             
             const dbRef = databases[currentMode];
@@ -342,10 +348,10 @@
                 dbRef[tribunal][ano].sort((a, b) => b - a);
                 tribunalAtual = tribunal; anoAtual = ano;
                 salvarDb();
-                alert(`${count} adicionados.`);
+                alert(`${count} itens adicionados.`);
                 return true;
             } else {
-                alert("Nenhum item novo."); return false;
+                alert("Nenhum item novo nesta faixa."); return false;
             }
         }
 
@@ -354,7 +360,7 @@
             return `${currentMode}-${tribunalAtual}-${num}`;
         }
 
-        // --- MANIPULAÇÃO DO DOM / RENDERIZAÇÃO ---
+        // --- RENDERIZAÇÃO ---
 
         function renderTribunalTabs() {
             const container = document.getElementById('courtTabsContainer');
@@ -375,17 +381,20 @@
             keys.forEach(nome => {
                 const btn = document.createElement('button');
                 const active = nome === tribunalAtual;
+                
                 btn.className = active 
                     ? "px-4 py-2 rounded-xl text-sm font-bold shadow-sm bg-white text-sky-700 border border-gray-200/50 flex items-center" 
                     : "px-4 py-2 rounded-xl text-sm font-medium text-gray-500 hover:text-gray-700 hover:bg-white/60 border border-transparent flex items-center";
-                btn.onclick = () => mudarTribunal(nome);
+                
+                // Importante: usamos window.mudarTribunal aqui
+                btn.onclick = () => window.mudarTribunal(nome);
                 btn.innerHTML = `<span>${nome}</span>`;
                 
                 if (!['STF', 'STJ', 'TST', 'STF - Vinculante'].includes(nome)) {
                     const del = document.createElement('span');
                     del.className = 'btn-del-court ml-2';
                     del.innerHTML = '<i class="fa-solid fa-xmark"></i>';
-                    del.onclick = (e) => excluirTribunal(nome, e);
+                    del.onclick = (e) => window.excluirTribunal(nome, e);
                     btn.appendChild(del);
                 }
                 container.appendChild(btn);
@@ -403,6 +412,7 @@
             
             const anos = Object.keys(dbRef[tribunalAtual]).sort((a,b)=>b-a);
             select.innerHTML = '';
+            
             if(anos.length === 0) {
                 const o = document.createElement('option'); o.value = anoAtual; o.text = anoAtual; select.appendChild(o);
             } else {
@@ -412,6 +422,7 @@
                     select.appendChild(o);
                 });
             }
+            // Sincroniza
             if(select.value) anoAtual = select.value;
         }
 
@@ -429,14 +440,13 @@
             
             const lista = dbRef[tribunalAtual][anoAtual] || [];
             
-            // Labels
             const lp = document.getElementById('labelProgress');
             if(lp) lp.innerText = `Progresso (${cardTitles[currentMode]})`;
             const mt = document.getElementById('modalTitle');
             if(mt) mt.innerText = `Gerenciar ${cardTitles[currentMode]}`;
 
             if(lista.length === 0) {
-                container.innerHTML = `<div class="col-span-full flex flex-col items-center justify-center py-20 text-gray-400 bg-white/80 rounded-[2rem] border-2 border-dashed border-gray-300/50 shadow-sm backdrop-blur-sm"><div class="bg-gray-50 p-5 rounded-full mb-4 shadow-inner"><i class="fa-solid fa-folder-plus text-5xl text-gray-300/80"></i></div><p class="font-medium text-lg text-gray-500">Nenhum item aqui.</p><button onclick="abrirModal()" class="mt-4 px-8 py-3 bg-gradient-to-r from-sky-500 to-sky-600 text-white rounded-full hover:from-sky-600 hover:to-sky-700 font-bold transition shadow-lg shadow-sky-200/50 text-sm transform hover:-translate-y-0.5">Adicionar agora</button></div>`;
+                container.innerHTML = `<div class="col-span-full flex flex-col items-center justify-center py-20 text-gray-400 bg-white/80 rounded-[2rem] border-2 border-dashed border-gray-300/50 shadow-sm backdrop-blur-sm"><div class="bg-gray-50 p-5 rounded-full mb-4 shadow-inner"><i class="fa-solid fa-folder-plus text-5xl text-gray-300/80"></i></div><p class="font-medium text-lg text-gray-500">Nenhum item aqui.</p><button onclick="window.abrirModal()" class="mt-4 px-8 py-3 bg-gradient-to-r from-sky-500 to-sky-600 text-white rounded-full hover:from-sky-600 hover:to-sky-700 font-bold transition shadow-lg shadow-sky-200/50 text-sm transform hover:-translate-y-0.5">Adicionar agora</button></div>`;
                 atualizarProgresso(0,0); return;
             }
 
@@ -455,9 +465,10 @@
                 const card = document.createElement('div');
                 card.className = "info-card rounded-[2rem] flex flex-col items-center justify-between relative group h-[190px]";
                 
+                // Usando window.excluirItem etc.
                 card.innerHTML = `
-                    <button class="card-action-btn btn-delete-card" onclick="excluirItem('${tribunalAtual}','${anoAtual}',${num},event)"><i class="fa-solid fa-trash-can"></i></button>
-                    <button class="card-action-btn btn-reset-card" onclick="resetarLeitura('${id}',event)"><i class="fa-solid fa-rotate-left"></i></button>
+                    <button class="card-action-btn btn-delete-card" onclick="window.excluirItem('${tribunalAtual}','${anoAtual}',${num},event)"><i class="fa-solid fa-trash-can"></i></button>
+                    <button class="card-action-btn btn-reset-card" onclick="window.resetarLeitura('${id}',event)"><i class="fa-solid fa-rotate-left"></i></button>
                     <div class="card-header-bar w-full text-[10px] uppercase tracking-widest text-gray-400 font-bold py-2.5">${cardTitles[currentMode]}</div>
                     <div class="text-center flex-1 flex flex-col justify-center pb-2">
                         <span class="info-num text-5xl font-extrabold ${txtColor} leading-tight tracking-tight drop-shadow-sm">${num}</span>
@@ -472,7 +483,7 @@
                     let cls = 'rev-btn';
                     if(nivel>=i) cls += ` btn-rev-active-${i}`;
                     b.className = cls; b.innerText = i;
-                    b.onclick = (e) => { e.stopPropagation(); setarNivel(id, i); };
+                    b.onclick = (e) => { e.stopPropagation(); window.setarNivel(id, i); };
                     revDiv.appendChild(b);
                 }
                 
@@ -480,7 +491,7 @@
                 let clsCust = 'rev-btn';
                 if(nivel>3) { clsCust += ' btn-rev-active-custom'; bCust.setAttribute('data-level', nivel); }
                 bCust.className = clsCust; bCust.innerText = '...';
-                bCust.onclick = (e) => inputNivelPersonalizado(id, e);
+                bCust.onclick = (e) => window.inputNivelPersonalizado(id, e);
                 revDiv.appendChild(bCust);
                 
                 card.appendChild(revDiv);
@@ -501,12 +512,67 @@
             if(txt) txt.innerText = `${p}% (${lidos}/${total})`;
         }
 
-        // --- FUNÇÕES EXPOSTAS AO WINDOW (Para onclick funcionar) ---
-        // (Isso corrige o ReferenceError 'abrirModal is not defined')
+        function executarReset() {
+            const tribunalAlvo = document.getElementById('inputTribunalSelect').value;
+            const anoAlvo = document.getElementById('inputAno').value;
+            if(!tribunalAlvo || !anoAlvo) return alert("Selecione Tribunal e Ano.");
+            
+            const dbRef = databases[currentMode];
+            if(!dbRef[tribunalAlvo] || !dbRef[tribunalAlvo][anoAlvo]) return alert("Não existem itens.");
+            
+            if(confirm(`Resetar leitura de TODOS os itens do ${tribunalAlvo} em ${anoAlvo}?`)) {
+                const lista = dbRef[tribunalAlvo][anoAlvo]; 
+                let count = 0;
+                lista.forEach(num => { 
+                    const id = (currentMode === 'informativos') ? `${tribunalAlvo}-${num}` : `${currentMode}-${tribunalAlvo}-${num}`;
+                    if(leituras[id]) { delete leituras[id]; count++; } 
+                });
+                salvarLeituras(); 
+                window.fecharModal();
+                alert(`Leituras resetadas: ${count}`);
+            }
+        }
+
+        function salvarDados() {
+            const ano = document.getElementById('inputAno').value; 
+            const tribunalAlvo = document.getElementById('inputTribunalSelect').value;
+            const isSingle = document.getElementById('tabSingle').classList.contains('active'); 
+            
+            let sucesso = false;
+            if(isSingle) { 
+                const num = document.getElementById('inputNumSingle').value; 
+                sucesso = adicionarUnico(tribunalAlvo, ano, num); 
+            } else { 
+                const start = document.getElementById('inputNumStart').value; 
+                const end = document.getElementById('inputNumEnd').value; 
+                sucesso = adicionarFaixa(tribunalAlvo, ano, start, end); 
+            }
+            
+            if(sucesso) { 
+                window.fecharModal(); 
+                document.getElementById('inputNumSingle').value = ''; 
+                document.getElementById('inputNumStart').value = ''; 
+                document.getElementById('inputNumEnd').value = ''; 
+            }
+        }
+
+        // ========================================================
+        // 6. EXPORTAR FUNÇÕES PARA O WINDOW (SOLUÇÃO DOS ERROS)
+        // ========================================================
+        
+        // Atribuir explicitamente ao objeto window faz com que o HTML
+        // consiga ver estas funções, mesmo estando dentro do module.
+        window.salvarDados = salvarDados;
+        window.executarReset = executarReset;
+        window.criarTribunal = criarTribunal;
+        window.mudarModo = mudarModo;
+        window.mudarAno = mudarAno;
+        window.mudarTribunal = mudarTribunal;
         
         window.abrirModal = function() {
             document.getElementById('configModal').classList.remove('hidden');
             document.getElementById('inputAno').value = anoAtual;
+            
             const sel = document.getElementById('inputTribunalSelect');
             sel.innerHTML = '';
             
@@ -525,7 +591,7 @@
                 if(t === tribunalAtual) o.selected = true;
                 sel.appendChild(o);
             });
-            switchModalTab('single');
+            window.switchModalTab('single');
         };
 
         window.fecharModal = function() {
@@ -558,13 +624,6 @@
             }
         };
 
-        window.salvarDados = salvarDados;
-        window.executarReset = executarReset;
-        window.criarTribunal = criarTribunal;
-        window.mudarModo = mudarModo;
-        window.mudarAno = mudarAno;
-        window.mudarTribunal = mudarTribunal;
-        
         window.excluirItem = function(t, a, n, ev) {
             ev.stopPropagation();
             if(confirm(`Excluir item ${n}?`)) {
@@ -604,14 +663,8 @@
             }
         };
 
-        // Renderiza estado inicial (vazio até o Firebase carregar)
-        init();
-        console.log("✅ Script Jurisprudência carregado com sucesso!");
-
     </script>
     
     <script src="menu.js"></script>
-    <script type="module" src="firebase-config.js"></script>
-    <script type="module" src="auth.js"></script>
-</body>
+    </body>
 </html>
