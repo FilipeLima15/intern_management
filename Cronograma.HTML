@@ -16,7 +16,7 @@
         <header class="bg-white border-b border-gray-200 h-16 px-6 flex justify-between items-center shadow-sm shrink-0">
             <div>
                 <h1 class="text-xl font-bold text-gray-800">Cronograma Semanal</h1>
-                <p class="text-xs text-gray-500">Organize seus horários de estudo</p>
+                <p class="text-xs text-gray-500">Organize seus horários de estudo (Salvo na Nuvem)</p>
             </div>
             
             <button id="addRowBtn" class="bg-sky-600 hover:bg-sky-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm transition flex items-center gap-2">
@@ -57,7 +57,7 @@
                 </div>
             </div>
 
-            <div class="bg-white rounded-xl shadow-md border border-gray-200 flex flex-col flex-1 overflow-hidden h-full">
+            <div class="bg-white rounded-xl shadow-md border border-gray-200 flex flex-col flex-1 overflow-hidden h-full min-h-[400px]">
                 <div class="overflow-auto h-full relative"> 
                     <table class="schedule-table" id="scheduleTable">
                         <thead>
@@ -77,6 +77,11 @@
                     </table>
                 </div>
                 
+                <div id="loadingMessage" class="hidden text-center py-12 text-gray-400">
+                    <i class="fa-solid fa-circle-notch fa-spin text-4xl mb-3 text-sky-500"></i>
+                    <p>Carregando cronograma...</p>
+                </div>
+
                 <div id="emptyMessage" class="hidden text-center py-12 text-gray-400">
                     <i class="fa-regular fa-calendar text-4xl mb-3 opacity-50"></i>
                     <p>Nenhum horário cadastrado.</p>
@@ -85,8 +90,8 @@
 
             <div class="mt-4 flex justify-between items-center text-xs text-gray-500 px-2">
                 <div id="saveIndicator" class="flex items-center gap-2">
-                    <i class="fas fa-check-circle text-green-500"></i>
-                    <span id="saveStatus">Salvo e sincronizado</span>
+                    <i class="fas fa-circle-notch fa-spin text-gray-400" id="saveIcon"></i>
+                    <span id="saveStatus">Aguardando login...</span>
                 </div>
                 <div>Total de horários: <span id="totalRows" class="font-bold">0</span></div>
             </div>
@@ -94,16 +99,22 @@
         </div>
     </main>
 
-    <script>
+    <script type="module">
+    import { db, auth } from "./firebase-config.js";
+    import { ref, set, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+    import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+
     document.addEventListener('DOMContentLoaded', function() {
+        
         // Elementos DOM
         const scheduleBody = document.getElementById('scheduleBody');
         const addRowBtn = document.getElementById('addRowBtn');
         const saveIndicator = document.getElementById('saveIndicator');
         const saveStatus = document.getElementById('saveStatus');
+        const saveIcon = document.getElementById('saveIcon');
         const totalRowsElement = document.getElementById('totalRows');
         const emptyMessage = document.getElementById('emptyMessage');
-        const concursoLink = document.getElementById('concursoLink'); // Ainda pode ser usado se o menu.js demorar, mas menu.js tem seu próprio link
+        const loadingMessage = document.getElementById('loadingMessage');
 
         // Toolbar elements
         const boldBtn = document.getElementById('boldBtn');
@@ -118,11 +129,9 @@
         const multiSelectBtn = document.getElementById('multiSelectBtn');
         const undoBtn = document.getElementById('undoBtn');
 
-        // Link do concurso (Fallback se o menu não carregar a tempo ou para lógica interna)
-        const savedLink = localStorage.getItem("concursoURL") || "#";
-        if(concursoLink) concursoLink.href = savedLink;
-
+        // Estado Global
         let scheduleData = []; 
+        let currentUserUID = null;
         const undoStack = [];
         const UNDO_LIMIT = 50;
         let dragSrcIndex = null;
@@ -130,7 +139,23 @@
         const selectedCells = new Set();
         let isMouseDownForSelect = false;
 
+        // --- AUTHENTICATION ---
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                currentUserUID = user.uid;
+                setStatus('loading', 'Sincronizando...');
+                loadFromFirebase();
+            } else {
+                currentUserUID = null;
+                scheduleData = [];
+                renderTable([]);
+                setStatus('error', 'Faça login para ver seu cronograma.');
+            }
+        });
+
+        // --- HELPERS ---
         function cloneDeep(obj) { return JSON.parse(JSON.stringify(obj)); }
+        
         function debounce(func, wait) {
             let timeout;
             return function(...args) {
@@ -140,28 +165,79 @@
         }
 
         function setStatus(type, msg) {
-            const icon = saveIndicator.querySelector('i');
             saveStatus.textContent = msg;
-            if(type === 'saving') {
-                saveIndicator.className = 'flex items-center gap-2 text-sky-500';
-                icon.className = 'fas fa-sync-alt fa-spin';
+            saveIndicator.className = 'flex items-center gap-2';
+            
+            if(type === 'saving' || type === 'loading') {
+                saveIndicator.classList.add('text-sky-500');
+                saveIcon.className = 'fas fa-sync-alt fa-spin';
             } else if (type === 'saved') {
-                saveIndicator.className = 'flex items-center gap-2 text-green-600';
-                icon.className = 'fas fa-check-circle';
+                saveIndicator.classList.add('text-green-600');
+                saveIcon.className = 'fas fa-check-circle';
+            } else if (type === 'error') {
+                saveIndicator.classList.add('text-red-500');
+                saveIcon.className = 'fas fa-exclamation-circle';
             } else {
-                saveIndicator.className = 'flex items-center gap-2 text-red-500';
-                icon.className = 'fas fa-exclamation-circle';
+                saveIndicator.classList.add('text-gray-400');
+                saveIcon.className = 'fas fa-clock';
             }
         }
 
-        function saveData() {
-            try {
-                localStorage.setItem('studySchedule', JSON.stringify(scheduleData));
-                setStatus('saved', 'Alterações salvas');
-            } catch (e) { setStatus('error', 'Erro ao salvar'); }
-        }
-        const debouncedSave = debounce(saveData, 800);
+        // --- FIREBASE CRUD ---
+        async function loadFromFirebase() {
+            if (!currentUserUID) return;
+            
+            scheduleBody.innerHTML = '';
+            loadingMessage.classList.remove('hidden');
+            emptyMessage.classList.add('hidden');
 
+            try {
+                const snapshot = await get(ref(db, `users/${currentUserUID}/cronograma`));
+                if (snapshot.exists()) {
+                    const data = snapshot.val();
+                    // Normalizar dados (garantir arrays onde necessário)
+                    scheduleData = (data || []).map(r => ({
+                        time: r.time || '',
+                        days: r.days || Array(7).fill(''),
+                        timeBg: r.timeBg||'', bg: r.bg||Array(7).fill(''),
+                        timeColor: r.timeColor||'', color: r.color||Array(7).fill(''),
+                        timeAlign: r.timeAlign||'', align: r.align||Array(7).fill('')
+                    }));
+                } else {
+                    // Dados padrão se vazio
+                    scheduleData = [
+                        { time: '08:00', days: ['Descanso', 'Português', 'Matemática', 'Direito Const.', 'Informática', 'Revisão', 'Simulado'], bg:[], color:[], align:[] },
+                        { time: '14:00', days: ['Lazer', 'Dir. Admin', 'Raciocínio', 'Dir. Penal', 'Atualidades', 'Lei Seca', 'Correção'], bg:[], color:[], align:[] }
+                    ];
+                    // Salvar o padrão
+                    saveToFirebase(true);
+                }
+                loadingMessage.classList.add('hidden');
+                renderTable(scheduleData);
+                setStatus('saved', 'Carregado da nuvem');
+            } catch (e) {
+                console.error(e);
+                loadingMessage.classList.add('hidden');
+                setStatus('error', 'Erro ao carregar dados');
+            }
+        }
+
+        async function saveToFirebase(silent = false) {
+            if (!currentUserUID) return;
+            if (!silent) setStatus('saving', 'Salvando na nuvem...');
+            
+            try {
+                await set(ref(db, `users/${currentUserUID}/cronograma`), scheduleData);
+                if (!silent) setStatus('saved', 'Alterações salvas');
+            } catch (e) {
+                console.error(e);
+                setStatus('error', 'Erro ao salvar');
+            }
+        }
+        
+        const debouncedSave = debounce(saveToFirebase, 1500);
+
+        // --- UNDO/REDO & STATE ---
         function pushSnapshot() {
             const snapshot = cloneDeep(scheduleData);
             if (undoStack.length > 0) {
@@ -177,9 +253,10 @@
             const prev = undoStack.pop();
             scheduleData = cloneDeep(prev);
             renderTable(scheduleData);
-            saveData();
+            saveToFirebase();
         }
 
+        // --- SELEÇÃO ---
         function clearSelection() {
             selectedCells.forEach(div => div.classList.remove('selected-cell'));
             selectedCells.clear();
@@ -195,21 +272,24 @@
             }
         }
 
+        // --- RENDER ---
         function renderTable(data) {
             scheduleBody.innerHTML = '';
-            scheduleData = data || [];
+            // Se data for null, usa array vazio
+            const rows = data || [];
 
-            if (!Array.isArray(scheduleData) || scheduleData.length === 0) {
+            if (rows.length === 0) {
                 emptyMessage.classList.remove('hidden');
                 totalRowsElement.textContent = 0;
                 return;
             }
             emptyMessage.classList.add('hidden');
 
-            scheduleData.forEach((row, rowIndex) => {
+            rows.forEach((row, rowIndex) => {
                 const tr = document.createElement('tr');
                 tr.setAttribute('data-row', rowIndex);
 
+                // Coluna Horário
                 const timeCell = document.createElement('td');
                 timeCell.className = 'time-cell';
                 if (row.timeBg) timeCell.style.backgroundColor = row.timeBg;
@@ -226,6 +306,7 @@
                 timeCell.appendChild(timeDiv);
                 tr.appendChild(timeCell);
 
+                // Colunas Dias (0 a 6)
                 (row.days || Array(7).fill('')).forEach((html, dayIndex) => {
                     const td = document.createElement('td');
                     if (row.bg && row.bg[dayIndex]) td.style.backgroundColor = row.bg[dayIndex];
@@ -243,6 +324,7 @@
                     tr.appendChild(td);
                 });
 
+                // Coluna Ações
                 const actionCell = document.createElement('td');
                 actionCell.className = 'action-cell';
                 const actionWrap = document.createElement('div');
@@ -267,10 +349,11 @@
                 scheduleBody.appendChild(tr);
             });
 
-            totalRowsElement.textContent = scheduleData.length;
+            totalRowsElement.textContent = rows.length;
             bindDragHandlers();
         }
 
+        // --- ACTIONS ---
         function deleteRow(index) {
             pushSnapshot();
             scheduleData.splice(index, 1);
@@ -294,15 +377,19 @@
             debouncedSave();
         });
 
+        // --- EDIT EVENTS ---
         scheduleBody.addEventListener('input', (e) => {
             const el = e.target;
             if(!el.classList.contains('editable-content')) return;
+            
             const row = el.dataset.row;
             const col = el.dataset.col;
             const val = el.innerHTML;
+            
             if(col === 'time') scheduleData[row].time = val;
             else scheduleData[row].days[col] = val;
-            setStatus('saving', 'Salvando...');
+            
+            setStatus('saving', 'Digitando...');
             debouncedSave();
         });
 
@@ -341,16 +428,21 @@
             }
         });
 
+        // --- STYLES ---
         function applyStyle(action, value = null) {
             pushSnapshot();
             const targets = selectedCells.size > 0 ? Array.from(selectedCells) : [];
+            
             if(targets.length === 0 && !value) {
+                // Se não tem seleção específica, tenta aplicar onde o cursor está
                 document.execCommand(action, false, null);
                 return;
             }
+            
             targets.forEach(el => {
                 const row = el.dataset.row;
                 const col = el.dataset.col;
+                
                 if(action === 'color') {
                     el.style.color = value;
                     if(col === 'time') scheduleData[row].timeColor = value;
@@ -366,6 +458,7 @@
                     else scheduleData[row].align[col] = value;
                 }
             });
+
             if(targets.length > 0) {
                 setStatus('saving', 'Salvando estilo...');
                 debouncedSave();
@@ -383,6 +476,7 @@
         alignRightBtn.onclick = () => applyStyle('textAlign', 'right');
         undoBtn.onclick = undo;
 
+        // --- DRAG AND DROP ---
         function bindDragHandlers() {
             const handles = scheduleBody.querySelectorAll('.drag-handle');
             handles.forEach(h => {
@@ -414,39 +508,13 @@
                     const item = scheduleData.splice(dragSrcIndex, 1)[0];
                     scheduleData.splice(destIndex, 0, item);
                     renderTable(scheduleData);
-                    saveData();
+                    saveToFirebase();
                 }
             };
         }
-
-        function init() {
-            const saved = localStorage.getItem('studySchedule');
-            if (saved) {
-                try {
-                    const parsed = JSON.parse(saved);
-                    scheduleData = parsed.map(r => ({
-                        time: r.time || '',
-                        days: r.days || Array(7).fill(''),
-                        timeBg: r.timeBg||'', bg: r.bg||Array(7).fill(''),
-                        timeColor: r.timeColor||'', color: r.color||Array(7).fill(''),
-                        timeAlign: r.timeAlign||'', align: r.align||Array(7).fill('')
-                    }));
-                } catch(e) { console.error(e); }
-            }
-            if(scheduleData.length === 0) {
-                scheduleData = [
-                    { time: '08:00', days: ['Descanso', 'Português', 'Matemática', 'Direito Const.', 'Informática', 'Revisão', 'Simulado'], bg:[], color:[], align:[] },
-                    { time: '14:00', days: ['Lazer', 'Dir. Admin', 'Raciocínio', 'Dir. Penal', 'Atualidades', 'Lei Seca', 'Correção'], bg:[], color:[], align:[] }
-                ];
-            }
-            renderTable(scheduleData);
-            setStatus('saved', 'Carregado');
-        }
-        init();
     });
     </script>
     
-    <script src="menu.js"></script> <script type="module" src="firebase-config.js"></script>
-    <script type="module" src="auth.js"></script>
+    <script src="menu.js"></script>
 </body>
 </html>
