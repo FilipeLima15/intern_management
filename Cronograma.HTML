@@ -19,9 +19,14 @@
                 <p class="text-xs text-gray-500">Organize seus horários de estudo (Salvo na Nuvem)</p>
             </div>
             
-            <button id="addRowBtn" class="bg-sky-600 hover:bg-sky-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm transition flex items-center gap-2">
-                <i class="fa-solid fa-plus"></i> Novo Horário
-            </button>
+            <div class="flex gap-2">
+                <button id="manualSaveBtn" class="bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm transition flex items-center gap-2 hidden">
+                    <i class="fa-solid fa-cloud-arrow-up"></i> Salvar Agora
+                </button>
+                <button id="addRowBtn" class="bg-sky-600 hover:bg-sky-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm transition flex items-center gap-2">
+                    <i class="fa-solid fa-plus"></i> Novo Horário
+                </button>
+            </div>
         </header>
 
         <div class="flex-1 overflow-y-auto p-6 scroll-smooth">
@@ -100,15 +105,16 @@
     </main>
 
     <script type="module">
-    console.log("🚀 Iniciando Script Cronograma...");
+    console.log("🚀 Iniciando Script Cronograma (Versão Blindada)...");
 
     import { db, auth } from "./firebase-config.js";
     import { ref, set, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
     import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
-    // Elementos DOM (Seleção direta, pois type="module" já espera o DOM)
+    // Elementos DOM
     const scheduleBody = document.getElementById('scheduleBody');
     const addRowBtn = document.getElementById('addRowBtn');
+    const manualSaveBtn = document.getElementById('manualSaveBtn');
     const saveIndicator = document.getElementById('saveIndicator');
     const saveStatus = document.getElementById('saveStatus');
     const saveIcon = document.getElementById('saveIcon');
@@ -142,15 +148,17 @@
     // --- AUTHENTICATION ---
     onAuthStateChanged(auth, (user) => {
         if (user) {
-            console.log("✅ Cronograma: Usuário detectado", user.email);
+            console.log("✅ Usuário logado:", user.email);
             currentUserUID = user.uid;
+            manualSaveBtn.classList.remove('hidden'); // Mostra botão de salvar manual
             setStatus('loading', 'Sincronizando...');
             loadFromFirebase();
         } else {
-            console.log("❌ Cronograma: Sem usuário");
+            console.warn("⚠️ Usuário não logado.");
             currentUserUID = null;
             scheduleData = [];
             renderTable([]);
+            manualSaveBtn.classList.add('hidden');
             setStatus('error', 'Faça login para ver seu cronograma.');
         }
     });
@@ -186,7 +194,7 @@
         }
     }
 
-    // --- FIREBASE CRUD ---
+    // --- FIREBASE CRUD BLINDADO ---
     async function loadFromFirebase() {
         if (!currentUserUID) return;
         
@@ -197,8 +205,17 @@
         try {
             const snapshot = await get(ref(db, `users/${currentUserUID}/cronograma`));
             if (snapshot.exists()) {
-                const data = snapshot.val();
-                scheduleData = (data || []).map(r => ({
+                let data = snapshot.val();
+                
+                // CORREÇÃO CRÍTICA: Se o Firebase devolver Objeto em vez de Array, convertemos
+                if (data && typeof data === 'object' && !Array.isArray(data)) {
+                    console.log("⚠️ Detectado formato Objeto no Firebase, convertendo para Array...");
+                    data = Object.values(data);
+                }
+
+                if (!Array.isArray(data)) data = [];
+
+                scheduleData = data.map(r => ({
                     time: r.time || '',
                     days: r.days || Array(7).fill(''),
                     timeBg: r.timeBg||'', bg: r.bg||Array(7).fill(''),
@@ -206,46 +223,58 @@
                     timeAlign: r.timeAlign||'', align: r.align||Array(7).fill('')
                 }));
             } else {
-                // Dados padrão se vazio
+                // Dados padrão
+                console.log("ℹ️ Nenhum dado encontrado, criando padrão...");
                 scheduleData = [
                     { time: '08:00', days: ['Descanso', 'Português', 'Matemática', 'Direito Const.', 'Informática', 'Revisão', 'Simulado'], bg:[], color:[], align:[] },
                     { time: '14:00', days: ['Lazer', 'Dir. Admin', 'Raciocínio', 'Dir. Penal', 'Atualidades', 'Lei Seca', 'Correção'], bg:[], color:[], align:[] }
                 ];
-                saveToFirebase(true); // Salva o padrão
+                saveToFirebase(true); 
             }
             loadingMessage.classList.add('hidden');
             renderTable(scheduleData);
-            setStatus('saved', 'Carregado da nuvem');
+            setStatus('saved', 'Sincronizado');
         } catch (e) {
-            console.error("Erro load:", e);
+            console.error("🚨 Erro fatal no load:", e);
             loadingMessage.classList.add('hidden');
-            setStatus('error', 'Erro ao carregar dados');
+            setStatus('error', 'Erro ao carregar dados.');
         }
     }
 
     async function saveToFirebase(silent = false) {
-        if (!currentUserUID) return;
-        if (!silent) setStatus('saving', 'Salvando na nuvem...');
+        if (!currentUserUID) {
+            alert("Você não está logado!");
+            return;
+        }
+        if (!silent) setStatus('saving', 'Salvando...');
         
         try {
-            await set(ref(db, `users/${currentUserUID}/cronograma`), scheduleData);
-            console.log("💾 Cronograma salvo no Firebase!");
-            if (!silent) setStatus('saved', 'Alterações salvas');
+            // Garante que estamos salvando um Array puro, sem undefined
+            const dataToSave = JSON.parse(JSON.stringify(scheduleData));
+            
+            await set(ref(db, `users/${currentUserUID}/cronograma`), dataToSave);
+            console.log("💾 Salvo com sucesso no Firebase!");
+            if (!silent) setStatus('saved', 'Salvo na nuvem');
         } catch (e) {
-            console.error("Erro save:", e);
-            setStatus('error', 'Erro ao salvar');
+            console.error("🚨 Erro fatal no save:", e);
+            setStatus('error', 'Erro ao salvar. Tente novamente.');
+            alert("Erro ao salvar! Verifique sua conexão.");
         }
     }
     
+    // Auto-save com delay de 1.5s
     const debouncedSave = debounce(saveToFirebase, 1500);
+
+    // Botão Manual para garantir
+    if(manualSaveBtn) {
+        manualSaveBtn.addEventListener('click', () => {
+            saveToFirebase(false);
+        });
+    }
 
     // --- UNDO/REDO & STATE ---
     function pushSnapshot() {
         const snapshot = cloneDeep(scheduleData);
-        if (undoStack.length > 0) {
-            const last = undoStack[undoStack.length - 1];
-            if (JSON.stringify(last) === JSON.stringify(snapshot)) return;
-        }
         undoStack.push(snapshot);
         if (undoStack.length > UNDO_LIMIT) undoStack.shift();
     }
@@ -356,11 +385,11 @@
 
     // --- ACTIONS ---
     function deleteRow(index) {
+        if(!confirm("Excluir esta linha?")) return;
         pushSnapshot();
         scheduleData.splice(index, 1);
         renderTable(scheduleData);
-        setStatus('saving', 'Salvando...');
-        debouncedSave();
+        saveToFirebase();
     }
 
     if(addRowBtn) {
@@ -375,8 +404,7 @@
             };
             scheduleData.push(newRow);
             renderTable(scheduleData);
-            setStatus('saving', 'Salvando...');
-            debouncedSave();
+            saveToFirebase();
         });
     }
 
@@ -385,15 +413,17 @@
         const el = e.target;
         if(!el.classList.contains('editable-content')) return;
         
-        const row = el.dataset.row;
+        const row = parseInt(el.dataset.row);
         const col = el.dataset.col;
         const val = el.innerHTML;
         
-        if(col === 'time') scheduleData[row].time = val;
-        else scheduleData[row].days[col] = val;
-        
-        setStatus('saving', 'Digitando...');
-        debouncedSave();
+        if (scheduleData[row]) {
+            if(col === 'time') scheduleData[row].time = val;
+            else scheduleData[row].days[col] = val;
+            
+            setStatus('saving', 'Digitando...');
+            debouncedSave();
+        }
     });
 
     scheduleBody.addEventListener('mousedown', (e) => {
