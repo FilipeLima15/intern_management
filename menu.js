@@ -1,34 +1,41 @@
-// menu.js - Versão para Arquivos na RAIZ
+// menu.js - Versão Integrada ao Firebase
+// Gerencia a Sidebar e atualiza o Link do Concurso automaticamente
+
+import { auth, db } from "./firebase-config.js";
+import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { ref, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
 document.addEventListener("DOMContentLoaded", function() {
     
     const sidebarContainer = document.getElementById('sidebar-container');
     if (!sidebarContainer) return;
 
-    // Links DIRETOS (Sem pastas, pois tudo está junto)
+    // Links fixos
     const links = {
         home: 'home.html',
         cronograma: 'Cronograma.HTML',
         acompanhamento: 'index.html',
         jurisprudencia: 'jurisprudencia.html',
-        charts: 'charts.html',
-        concurso: localStorage.getItem("concursoURL") || "#"
+        charts: 'charts.html'
     };
 
-    // Detectar página ativa
+    // Detectar qual página está ativa para pintar o ícone
     const currentPath = window.location.pathname;
     const isActive = (key) => {
-        if (key === 'acompanhamento' && (currentPath.endsWith('index.html') || currentPath === '/')) return true;
+        if (key === 'acompanhamento' && (currentPath.endsWith('index.html') || currentPath.endsWith('/'))) return true;
         if (key === 'home' && currentPath.includes('home.html')) return true;
         if (key === 'cronograma' && currentPath.includes('Cronograma')) return true;
         if (key === 'jurisprudencia' && currentPath.includes('jurisprudencia')) return true;
         return false;
     };
 
+    // Estilos dos botões (Ativo vs Inativo)
     const getBtnClass = (active) => active 
         ? "w-10 h-10 rounded-xl bg-sky-500 text-white shadow-lg flex items-center justify-center transition transform scale-105" 
         : "w-10 h-10 rounded-xl text-sky-300 hover:bg-sky-800 hover:text-white flex items-center justify-center transition";
 
+    // HTML da Sidebar
+    // Note que adicionei o ID 'sidebarLinkConcurso' no botão que você pediu
     const sidebarHTML = `
         <aside class="w-16 bg-sky-900 text-sky-100 flex flex-col items-center py-6 shadow-2xl z-30 flex-shrink-0 transition-colors duration-300 h-full">
             <a href="${links.home}" class="mb-8 p-2 bg-sky-800 rounded-lg cursor-pointer hover:bg-sky-700 transition flex items-center justify-center shadow-lg group">
@@ -39,8 +46,13 @@ document.addEventListener("DOMContentLoaded", function() {
                 <a href="${links.cronograma}" class="${getBtnClass(isActive('cronograma'))}" title="Cronograma"><i class="fa-solid fa-calendar-days"></i></a>
                 <a href="${links.acompanhamento}" class="${getBtnClass(isActive('acompanhamento'))}" title="Acompanhamento"><i class="fa-solid fa-list-check"></i></a>
                 <a href="${links.jurisprudencia}" class="${getBtnClass(isActive('jurisprudencia'))}" title="Jurisprudência"><i class="fa-solid fa-gavel"></i></a>
+                
                 <a href="#" id="btnChartsMenu" class="${getBtnClass(false)}" title="Gráficos"><i class="fa-solid fa-chart-pie"></i></a>
-                <a href="${links.concurso}" target="_blank" class="w-10 h-10 rounded-xl text-sky-300 hover:bg-sky-800 hover:text-white flex items-center justify-center transition" title="Link do Concurso"><i class="fa-solid fa-link"></i></a>
+                
+                <a href="#" id="sidebarLinkConcurso" target="_blank" class="w-10 h-10 rounded-xl text-sky-300 hover:bg-sky-800 hover:text-white flex items-center justify-center transition" title="Link do Concurso (Carregando...)">
+                    <i class="fa-solid fa-link"></i>
+                </a>
+
                 <button id="btnLogout" class="w-10 h-10 mt-auto rounded-xl text-red-300 hover:bg-red-900 hover:text-white flex items-center justify-center transition" title="Sair"><i class="fa-solid fa-right-from-bracket"></i></button>
             </nav>
         </aside>
@@ -48,7 +60,39 @@ document.addEventListener("DOMContentLoaded", function() {
 
     sidebarContainer.innerHTML = sidebarHTML;
 
-    // Lógica do Modal de Gráficos (Mantida e integrada)
+    // --- LÓGICA DO LINK DO CONCURSO (FIREBASE) ---
+    const btnLink = document.getElementById('sidebarLinkConcurso');
+    
+    // Monitora o login para buscar o link correto na nuvem
+    onAuthStateChanged(auth, async (user) => {
+        if (user && btnLink) {
+            try {
+                // Busca o link salvo no caminho users/UID/config/concursoURL
+                const snapshot = await get(ref(db, `users/${user.uid}/config/concursoURL`));
+                if (snapshot.exists()) {
+                    const url = snapshot.val();
+                    if (url && url !== "#") {
+                        btnLink.href = url;
+                        btnLink.title = "Acessar Site da Banca";
+                        // Efeito visual para mostrar que carregou
+                        btnLink.classList.add("text-sky-100"); 
+                    }
+                }
+            } catch (error) {
+                console.error("Erro ao carregar link do menu:", error);
+            }
+        }
+    });
+
+    // --- GRÁFICOS (Overlay) ---
+    const btnCharts = document.getElementById('btnChartsMenu');
+    if(btnCharts) {
+        btnCharts.addEventListener('click', (e) => {
+            e.preventDefault();
+            openChartsOverlay();
+        });
+    }
+
     function openChartsOverlay() {
         if (document.getElementById('chartsOverlay')) return;
         const overlay = document.createElement('div');
@@ -60,7 +104,7 @@ document.addEventListener("DOMContentLoaded", function() {
         
         const iframe = document.createElement('iframe');
         iframe.id = 'chartsIframe'; 
-        iframe.src = links.charts; // Agora aponta corretamente para 'charts.html' na raiz
+        iframe.src = links.charts; 
         iframe.style.cssText = 'width: 100%; height: 100%; border: 0; display: block; background: #fff;';
         
         const closeBtn = document.createElement('button');
@@ -77,13 +121,5 @@ document.addEventListener("DOMContentLoaded", function() {
         window.addEventListener('message', function(event) {
             if (event.data && event.data.action === 'closeChartsOverlay') overlay.remove();
         }, { once: true });
-    }
-
-    const btnCharts = document.getElementById('btnChartsMenu');
-    if(btnCharts) {
-        btnCharts.addEventListener('click', (e) => {
-            e.preventDefault();
-            openChartsOverlay();
-        });
     }
 });
