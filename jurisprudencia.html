@@ -293,6 +293,13 @@
                 </div>
 
                 <div class="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl border border-gray-200 shadow-sm">
+                    <i class="fa-solid fa-book-open text-gray-400 text-xs"></i>
+                    <select id="dashboardSubjectFilter" onchange="window.gerarGrid()" class="bg-transparent border-none text-gray-600 text-xs font-bold focus:ring-0 outline-none cursor-pointer" style="max-width: 150px;">
+                        <option value="todos">Todas as Matérias</option>
+                    </select>
+                </div>
+
+                <div class="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl border border-gray-200 shadow-sm">
                     <i class="fa-solid fa-filter text-gray-400 text-xs"></i>
                     <select id="filterStatus" onchange="window.gerarGrid()" class="bg-transparent border-none text-gray-600 text-xs font-bold focus:ring-0 outline-none cursor-pointer">
                         <option value="todos">Todos</option>
@@ -674,25 +681,37 @@
             } else { rawList = dbRef[tribunalAtual][anoAtual] || []; }
             
             const filterStatus = document.getElementById('filterStatus').value;
-            // NOVO: Filtro de Busca
+            
+            // FILTRO DE BUSCA (Texto)
             const dashboardSearch = document.getElementById('dashboardSearch');
             const searchTerm = dashboardSearch ? dashboardSearch.value.toLowerCase().trim() : '';
+
+            // FILTRO DE MATÉRIA (Dropdown)
+            const subjectFilter = document.getElementById('dashboardSubjectFilter');
+            const subjectTerm = subjectFilter ? subjectFilter.value : 'todos';
 
             let filteredList = rawList.filter(num => {
                 const id = getId(num);
                 const nivel = leituras[id] || 0;
                 const isCanceled = statusFlags[id] === 'canceled';
+                const catStr = (categories[id] || '').toLowerCase(); // Pega a matéria
                 
                 // Filtros Padrão
                 if (hideCanceled && isCanceled) return false;
                 if (filterStatus === 'lidos' && nivel === 0) return false;
                 if (filterStatus === 'nao-lidos' && nivel > 0) return false;
 
-                // NOVO: Filtro de Busca (Número ou Categoria)
+                // Filtro de Texto (Nº ou Etiqueta)
                 if (searchTerm) {
                     const numStr = String(num).toLowerCase();
-                    const catStr = (categories[id] || '').toLowerCase();
                     if (!numStr.includes(searchTerm) && !catStr.includes(searchTerm)) {
+                        return false;
+                    }
+                }
+
+                // NOVO: Filtro de Matéria (Dropdown)
+                if (subjectTerm !== 'todos') {
+                    if ((categories[id] || '') !== subjectTerm) {
                         return false;
                     }
                 }
@@ -824,6 +843,31 @@
                 });
             }
             if(s.value) anoAtual = s.value;
+        }
+
+        // NOVO: Popula o Dropdown de Matérias (Inteligente)
+        function atualizarFiltroMaterias() {
+            const select = document.getElementById('dashboardSubjectFilter');
+            if(!select) return;
+
+            // Salva a seleção atual para não perder ao atualizar
+            const currentSelection = select.value;
+
+            // Limpa (mantendo a opção "Todos")
+            select.innerHTML = '<option value="todos">Todas as Matérias</option>';
+
+            // Pega todas as categorias usadas
+            const allCats = new Set();
+            Object.values(categories).forEach(cat => {
+                if(cat && cat.trim() !== "") allCats.add(cat.trim());
+            });
+
+            // Ordena e adiciona
+            Array.from(allCats).sort().forEach(cat => {
+                const opt = new Option(cat, cat);
+                if(cat === currentSelection) opt.selected = true;
+                select.appendChild(opt);
+            });
         }
 
         // --- 5. EDITOR DE NOTAS (ATUALIZADO) ---
@@ -1116,6 +1160,8 @@
                     if(data.categories) categories = data.categories;
                 }
                 window.mudarModo(currentMode); 
+                // Atualiza o filtro de matérias assim que os dados chegarem
+                atualizarFiltroMaterias();
             } catch (error) { console.error("Erro no carregamento:", error); }
         }
 
@@ -1181,7 +1227,12 @@
         window.salvarStatusFlags = async function() { if(currentUserUID) await set(getUserRef('statusFlags'), statusFlags); gerarGrid(); };
         window.salvarUrls = async function() { if(currentUserUID) await set(getUserRef('urls'), urls); gerarGrid(); };
         window.salvarNotes = async function() { if(currentUserUID) await set(getUserRef('notes'), notes); gerarGrid(); };
-        window.salvarCategories = async function() { if(currentUserUID) await set(getUserRef('categories'), categories); gerarGrid(); };
+        window.salvarCategories = async function() { 
+            if(currentUserUID) await set(getUserRef('categories'), categories); 
+            gerarGrid(); 
+            // Atualiza o filtro sempre que salvar uma categoria nova
+            atualizarFiltroMaterias();
+        };
 
         // Funções de Modal e Editor
         window.abrirModal = function() { document.getElementById('configModal').classList.remove('hidden'); document.getElementById('inputAno').value = (anoAtual === 'todos') ? new Date().getFullYear() : anoAtual; const sel = document.getElementById('inputTribunalSelect'); sel.innerHTML = ''; const dbRef = databases[currentMode] || {}; Object.keys(dbRef).forEach(t => { const o = document.createElement('option'); o.value = t; o.text = t; if(t===tribunalAtual) o.selected=true; sel.appendChild(o); }); window.switchModalTab('single'); };
@@ -1230,7 +1281,6 @@
             }
         };
         
-        // FUNÇÃO ATUALIZADA: TÍTULO DINÂMICO NO MODAL (CORRIGIDO ALINHAMENTO)
         window.openNoteModal = function(id, ev) { 
             ev.stopPropagation(); 
             currentCardId = id; 

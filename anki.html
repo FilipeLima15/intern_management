@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flashcards - Sistema de Estudos</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        /* EFEITO DE FLIP (GIRAR CARTA) */
+        .perspective-1000 { perspective: 1000px; }
+        .transform-style-3d { transform-style: preserve-3d; }
+        .backface-hidden { backface-visibility: hidden; }
+        .rotate-y-180 { transform: rotateY(180deg); }
+        
+        .flashcard-inner {
+            transition: transform 0.6s;
+            transform-style: preserve-3d;
+            position: relative;
+            width: 100%;
+            height: 100%;
+        }
+        .flashcard.flipped .flashcard-inner {
+            transform: rotateY(180deg);
+        }
+        .flashcard-face {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            backface-visibility: hidden;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 2rem;
+            border-radius: 1.5rem;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
+            overflow-y: auto; /* Permite scroll se o texto for grande */
+        }
+        .flashcard-front { background: #ffffff; color: #1e293b; }
+        .flashcard-back { background: #f0f9ff; color: #0f172a; transform: rotateY(180deg); border: 2px solid #bae6fd; }
+
+        /* Botões de Resposta */
+        .btn-ans { transition: all 0.2s; transform: translateY(0); }
+        .btn-ans:hover { transform: translateY(-2px); }
+        .btn-ans:active { transform: translateY(1px); }
+
+        /* --- ESTILOS DO EDITOR RICO (Copiado da Jurisprudência) --- */
+        .anki-editor-container {
+            border: 1px solid #e2e8f0;
+            border-radius: 0.75rem;
+            overflow: hidden;
+            background: white;
+            display: flex;
+            flex-direction: column;
+        }
+        .anki-toolbar {
+            background: #f8fafc;
+            border-bottom: 1px solid #e2e8f0;
+            padding: 0.5rem;
+            display: flex;
+            gap: 0.25rem;
+            flex-wrap: wrap;
+        }
+        .anki-editor-body {
+            min-height: 100px;
+            max-height: 150px;
+            overflow-y: auto;
+            padding: 1rem;
+            outline: none;
+            font-size: 0.95rem;
+            line-height: 1.5;
+            color: #334155;
+        }
+        .anki-editor-body:focus { background-color: #fcfcfc; }
+        
+        .tb-btn {
+            width: 28px; height: 28px; border-radius: 4px; display: flex; align-items: center; justify-content: center;
+            color: #64748b; cursor: pointer; transition: all 0.2s; border: 1px solid transparent;
+        }
+        .tb-btn:hover { background: #e2e8f0; color: #0f172a; }
+        
+        /* Tabelas dentro do card */
+        .anki-editor-body table { border-collapse: collapse; width: 100%; margin: 5px 0; border: 1px solid #000; }
+        .anki-editor-body th, .anki-editor-body td { border: 1px solid #000; padding: 4px; }
+        
+        /* Abas de Tipo */
+        .tab-btn {
+            padding: 0.5rem 1rem;
+            font-weight: 600;
+            font-size: 0.9rem;
+            color: #64748b;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+        }
+        .tab-btn:hover { color: #0284c7; background: #f0f9ff; }
+        .tab-btn.active { color: #0284c7; border-bottom-color: #0284c7; }
+
+        /* Popover de Cores */
+        .color-popover {
+            position: absolute; background: white; border: 1px solid #cbd5e1;
+            padding: 8px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); z-index: 100;
+            display: none; grid-template-columns: repeat(4, 1fr); gap: 4px; width: 140px;
+        }
+        .color-popover.show { display: grid; }
+        .color-swatch { width: 24px; height: 24px; border-radius: 4px; cursor: pointer; border: 1px solid #e2e8f0; }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800 h-screen flex overflow-hidden font-sans">
+
+    <div id="sidebar-container"></div>
+
+    <main class="flex-1 flex flex-col min-w-0 bg-gray-100 overflow-hidden relative">
+        
+        <header class="bg-white border-b border-gray-200 shadow-sm shrink-0 z-20">
+            <div class="h-16 px-6 flex justify-between items-center">
+                <div class="flex items-center gap-6">
+                    <h1 class="text-xl font-bold text-gray-800 flex items-center gap-2">
+                        <i class="fa-solid fa-layer-group text-sky-600"></i> Flashcards
+                    </h1>
+                    
+                    <div class="flex h-16 items-end">
+                        <button onclick="window.switchTab('law')" id="tabLaw" class="tab-btn active h-12 flex items-center">
+                            <i class="fa-solid fa-scale-balanced mr-2"></i> Conteúdo Direito
+                        </button>
+                        <button onclick="window.switchTab('juris')" id="tabJuris" class="tab-btn h-12 flex items-center">
+                            <i class="fa-solid fa-gavel mr-2"></i> Jurisprudência
+                        </button>
+                    </div>
+                </div>
+
+                <div class="flex gap-3">
+                    <button id="btnBackToDecks" onclick="window.showDecksView()" class="hidden px-4 py-2 text-sm font-bold text-gray-500 hover:text-sky-600 transition">
+                        <i class="fa-solid fa-arrow-left mr-1"></i> Voltar
+                    </button>
+                    <button onclick="window.openCreateModal()" class="bg-sky-600 hover:bg-sky-700 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-md transition flex items-center gap-2">
+                        <i class="fa-solid fa-plus"></i> Novo Card
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <div class="flex-1 overflow-y-auto p-6 relative">
+            
+            <div id="viewDecks" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                </div>
+
+            <div id="viewStudy" class="hidden h-full flex flex-col items-center justify-center max-w-3xl mx-auto">
+                
+                <div class="w-full mb-4 flex justify-between items-end px-4">
+                    <span id="studyCounter" class="text-xs font-bold text-gray-400 uppercase">0 restantes</span>
+                    <span id="deckTitleDisplay" class="text-sm font-bold text-sky-700"></span>
+                </div>
+
+                <div class="w-full h-[500px] perspective-1000 group cursor-pointer mb-8" onclick="window.flipCard()">
+                    <div id="flashcard" class="flashcard-inner shadow-xl rounded-3xl">
+                        <div class="flashcard-face flashcard-front border border-gray-200">
+                            <span class="absolute top-6 left-6 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Pergunta</span>
+                            <div id="cardFrontText" class="text-lg text-center leading-relaxed w-full px-4 overflow-auto max-h-full">Carregando...</div>
+                            <div class="absolute bottom-4 text-xs text-gray-400 animate-pulse">Clique para ver a resposta</div>
+                        </div>
+                        <div class="flashcard-face flashcard-back">
+                            <span class="absolute top-6 left-6 text-[10px] font-bold text-sky-600 uppercase tracking-widest">Resposta</span>
+                            <div id="cardBackText" class="text-lg text-center leading-relaxed w-full px-4 overflow-auto max-h-full">...</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="studyControls" class="opacity-0 pointer-events-none transition-opacity duration-300 flex gap-4 w-full justify-center">
+                    <button onclick="window.rateCard('again')" class="btn-ans flex-1 max-w-[120px] py-3 rounded-xl bg-red-100 text-red-600 font-bold text-sm border border-red-200 shadow-sm hover:bg-red-200">
+                        <div class="text-[10px] opacity-70 mb-1">Errei</div>
+                        <1 min
+                    </button>
+                    <button onclick="window.rateCard('hard')" class="btn-ans flex-1 max-w-[120px] py-3 rounded-xl bg-orange-100 text-orange-600 font-bold text-sm border border-orange-200 shadow-sm hover:bg-orange-200">
+                        <div class="text-[10px] opacity-70 mb-1">Difícil</div>
+                        1 dia
+                    </button>
+                    <button onclick="window.rateCard('good')" class="btn-ans flex-1 max-w-[120px] py-3 rounded-xl bg-green-100 text-green-600 font-bold text-sm border border-green-200 shadow-sm hover:bg-green-200">
+                        <div class="text-[10px] opacity-70 mb-1">Bom</div>
+                        3 dias
+                    </button>
+                    <button onclick="window.rateCard('easy')" class="btn-ans flex-1 max-w-[120px] py-3 rounded-xl bg-sky-100 text-sky-600 font-bold text-sm border border-sky-200 shadow-sm hover:bg-sky-200">
+                        <div class="text-[10px] opacity-70 mb-1">Fácil</div>
+                        5 dias
+                    </button>
+                </div>
+            </div>
+
+            <div id="viewEmpty" class="hidden h-full flex flex-col items-center justify-center text-center">
+                <div class="w-20 h-20 bg-green-100 text-green-500 rounded-full flex items-center justify-center text-3xl mb-4 shadow-sm">
+                    <i class="fa-solid fa-check"></i>
+                </div>
+                <h2 class="text-2xl font-bold text-gray-800">Parabéns!</h2>
+                <p class="text-gray-500 mt-2">Você revisou todos os cards deste baralho por hoje.</p>
+                <button onclick="window.showDecksView()" class="mt-6 px-6 py-2 bg-sky-600 text-white rounded-lg font-bold shadow-md hover:bg-sky-700 transition">Voltar aos Baralhos</button>
+            </div>
+
+        </div>
+    </main>
+
+    <div id="createModal" class="fixed inset-0 bg-black/60 hidden z-50 flex items-center justify-center backdrop-blur-sm">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl h-[90vh] flex flex-col overflow-hidden border border-white/50">
+            <div class="bg-gray-50 px-6 py-4 border-b border-gray-200 flex justify-between items-center shrink-0">
+                <h3 class="text-lg font-bold text-gray-800">Novo Flashcard</h3>
+                <button onclick="window.closeCreateModal()" class="text-gray-400 hover:text-red-500"><i class="fa-solid fa-xmark text-xl"></i></button>
+            </div>
+            
+            <div class="flex-1 overflow-y-auto p-6 space-y-5">
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">Tipo de Card</label>
+                        <select id="inputType" class="w-full border border-gray-200 rounded-lg p-2 text-sm font-bold text-gray-700 focus:outline-none focus:border-sky-400">
+                            <option value="law">Conteúdo de Direito</option>
+                            <option value="juris">Jurisprudência</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">Baralho (Matéria)</label>
+                        <input type="text" id="inputDeckName" list="deckSuggestions" class="w-full border border-gray-200 rounded-lg p-2 text-sm font-bold text-gray-700 focus:outline-none focus:border-sky-400" placeholder="Ex: Penal Geral">
+                        <datalist id="deckSuggestions"></datalist>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Frente (Pergunta)</label>
+                    <div class="anki-editor-container">
+                        <div class="anki-toolbar" id="toolbarFront">
+                            <button class="tb-btn" onmousedown="event.preventDefault(); document.execCommand('bold')"><i class="fa-solid fa-bold"></i></button>
+                            <button class="tb-btn" onmousedown="event.preventDefault(); document.execCommand('italic')"><i class="fa-solid fa-italic"></i></button>
+                            <button class="tb-btn" onmousedown="event.preventDefault(); document.execCommand('underline')"><i class="fa-solid fa-underline"></i></button>
+                            <div class="w-px h-5 bg-gray-300 mx-1"></div>
+                            <button class="tb-btn" onmousedown="event.preventDefault(); window.toggleColorPopover('frontColor')"><i class="fa-solid fa-font text-red-500"></i></button>
+                            <button class="tb-btn" onmousedown="event.preventDefault(); window.toggleColorPopover('frontHilite')"><i class="fa-solid fa-highlighter text-yellow-400"></i></button>
+                        </div>
+                        <div id="popover-frontColor" class="color-popover">
+                            <div class="color-swatch bg-black" onmousedown="event.preventDefault(); window.applyColor('foreColor', '#000000')"></div>
+                            <div class="color-swatch bg-red-600" onmousedown="event.preventDefault(); window.applyColor('foreColor', '#dc2626')"></div>
+                            <div class="color-swatch bg-blue-600" onmousedown="event.preventDefault(); window.applyColor('foreColor', '#2563eb')"></div>
+                            <div class="color-swatch bg-green-600" onmousedown="event.preventDefault(); window.applyColor('foreColor', '#16a34a')"></div>
+                        </div>
+                        <div id="popover-frontHilite" class="color-popover">
+                            <div class="color-swatch bg-yellow-200" onmousedown="event.preventDefault(); window.applyColor('hiliteColor', '#fef08a')"></div>
+                            <div class="color-swatch bg-green-200" onmousedown="event.preventDefault(); window.applyColor('hiliteColor', '#bbf7d0')"></div>
+                            <div class="color-swatch bg-pink-200" onmousedown="event.preventDefault(); window.applyColor('hiliteColor', '#fbcfe8')"></div>
+                             <div class="color-swatch bg-white border border-gray-300 flex items-center justify-center" onmousedown="event.preventDefault(); window.applyColor('hiliteColor', 'transparent')"><i class="fa-solid fa-ban text-[10px]"></i></div>
+                        </div>
+
+                        <div id="editorFront" class="anki-editor-body" contenteditable="true" placeholder="Digite a pergunta..."></div>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Verso (Resposta)</label>
+                    <div class="anki-editor-container border-sky-200">
+                        <div class="anki-toolbar bg-sky-50">
+                            <button class="tb-btn" onmousedown="event.preventDefault(); document.execCommand('bold')"><i class="fa-solid fa-bold"></i></button>
+                            <button class="tb-btn" onmousedown="event.preventDefault(); document.execCommand('italic')"><i class="fa-solid fa-italic"></i></button>
+                            <button class="tb-btn" onmousedown="event.preventDefault(); document.execCommand('underline')"><i class="fa-solid fa-underline"></i></button>
+                            <button class="tb-btn" onmousedown="event.preventDefault(); window.insertTable()"><i class="fa-solid fa-table"></i></button>
+                            <div class="w-px h-5 bg-gray-300 mx-1"></div>
+                            <button class="tb-btn" onmousedown="event.preventDefault(); window.toggleColorPopover('backColor')"><i class="fa-solid fa-font text-red-500"></i></button>
+                            <button class="tb-btn" onmousedown="event.preventDefault(); window.toggleColorPopover('backHilite')"><i class="fa-solid fa-highlighter text-yellow-400"></i></button>
+                        </div>
+                         <div id="popover-backColor" class="color-popover">
+                            <div class="color-swatch bg-black" onmousedown="event.preventDefault(); window.applyColor('foreColor', '#000000')"></div>
+                            <div class="color-swatch bg-red-600" onmousedown="event.preventDefault(); window.applyColor('foreColor', '#dc2626')"></div>
+                            <div class="color-swatch bg-blue-600" onmousedown="event.preventDefault(); window.applyColor('foreColor', '#2563eb')"></div>
+                            <div class="color-swatch bg-green-600" onmousedown="event.preventDefault(); window.applyColor('foreColor', '#16a34a')"></div>
+                        </div>
+                        <div id="popover-backHilite" class="color-popover">
+                            <div class="color-swatch bg-yellow-200" onmousedown="event.preventDefault(); window.applyColor('hiliteColor', '#fef08a')"></div>
+                            <div class="color-swatch bg-green-200" onmousedown="event.preventDefault(); window.applyColor('hiliteColor', '#bbf7d0')"></div>
+                            <div class="color-swatch bg-pink-200" onmousedown="event.preventDefault(); window.applyColor('hiliteColor', '#fbcfe8')"></div>
+                            <div class="color-swatch bg-white border border-gray-300 flex items-center justify-center" onmousedown="event.preventDefault(); window.applyColor('hiliteColor', 'transparent')"><i class="fa-solid fa-ban text-[10px]"></i></div>
+                        </div>
+                        <div id="editorBack" class="anki-editor-body bg-sky-50/30" contenteditable="true" placeholder="Digite a resposta..."></div>
+                    </div>
+                </div>
+
+            </div>
+
+            <div class="p-4 bg-gray-50 border-t border-gray-200 shrink-0">
+                <button onclick="window.saveNewCard()" class="w-full bg-sky-600 hover:bg-sky-700 text-white font-bold py-3 rounded-xl shadow-lg transition">Salvar Card</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="anki.js"></script>
+    <script src="menu.js"></script>
+</body>
+</html>
