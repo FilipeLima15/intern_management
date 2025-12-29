@@ -8,103 +8,65 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="styles.css">
     <style>
-        /* EFEITO DE FLIP (GIRAR CARTA) */
-        .perspective-1000 { perspective: 1000px; }
-        .transform-style-3d { transform-style: preserve-3d; }
-        .backface-hidden { backface-visibility: hidden; }
-        .rotate-y-180 { transform: rotateY(180deg); }
-        
-        .flashcard-inner {
-            transition: transform 0.6s;
-            transform-style: preserve-3d;
-            position: relative;
-            width: 100%;
-            height: 100%;
+        /* ESTILOS ESPECÍFICOS DO ANKI */
+        .flashcard-container {
+            width: 100%; background: white; border-radius: 1.5rem;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1); border: 1px solid #e2e8f0;
+            overflow: hidden; display: flex; flex-direction: column; min-height: 400px;
         }
-        .flashcard.flipped .flashcard-inner {
-            transform: rotateY(180deg);
-        }
-        .flashcard-face {
-            position: absolute;
-            width: 100%;
-            height: 100%;
-            backface-visibility: hidden;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            padding: 2rem;
-            border-radius: 1.5rem;
-            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
-            overflow-y: auto; /* Permite scroll se o texto for grande */
-        }
-        .flashcard-front { background: #ffffff; color: #1e293b; }
-        .flashcard-back { background: #f0f9ff; color: #0f172a; transform: rotateY(180deg); border: 2px solid #bae6fd; }
+        .flashcard-section { padding: 2rem; position: relative; }
+        .flashcard-front { background: #ffffff; color: #1e293b; flex: 1; }
+        .flashcard-back { background: #f0f9ff; color: #0f172a; border-top: 2px dashed #bae6fd; display: none; flex: 1; }
+        .flashcard-container.revealed .flashcard-back { display: block; animation: fadeIn 0.5s ease; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
-        /* Botões de Resposta */
         .btn-ans { transition: all 0.2s; transform: translateY(0); }
         .btn-ans:hover { transform: translateY(-2px); }
         .btn-ans:active { transform: translateY(1px); }
 
-        /* --- ESTILOS DO EDITOR RICO (Copiado da Jurisprudência) --- */
-        .anki-editor-container {
-            border: 1px solid #e2e8f0;
-            border-radius: 0.75rem;
-            overflow: hidden;
-            background: white;
-            display: flex;
-            flex-direction: column;
-        }
-        .anki-toolbar {
-            background: #f8fafc;
-            border-bottom: 1px solid #e2e8f0;
-            padding: 0.5rem;
-            display: flex;
-            gap: 0.25rem;
-            flex-wrap: wrap;
-        }
-        .anki-editor-body {
-            min-height: 100px;
-            max-height: 150px;
-            overflow-y: auto;
-            padding: 1rem;
-            outline: none;
-            font-size: 0.95rem;
-            line-height: 1.5;
-            color: #334155;
-        }
-        .anki-editor-body:focus { background-color: #fcfcfc; }
+        /* EDITOR E TABS */
+        .editor-toolbar { display: flex; gap: 4px; padding: 6px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px 8px 0 0; flex-wrap: wrap; align-items: center; }
+        .editor-content { min-height: 100px; max-height: 150px; overflow-y: auto; padding: 10px; border: 1px solid #e2e8f0; border-top: none; border-radius: 0 0 8px 8px; outline: none; font-size: 14px; background: white; }
+        .editor-content:focus { border-color: #38bdf8; }
+        .nt-btn { width: 28px; height: 28px; border-radius: 4px; display: flex; align-items: center; justify-content: center; color: #64748b; cursor: pointer; transition: 0.2s; }
+        .nt-btn:hover { background: #e2e8f0; color: #0284c7; }
         
-        .tb-btn {
-            width: 28px; height: 28px; border-radius: 4px; display: flex; align-items: center; justify-content: center;
-            color: #64748b; cursor: pointer; transition: all 0.2s; border: 1px solid transparent;
-        }
-        .tb-btn:hover { background: #e2e8f0; color: #0f172a; }
-        
-        /* Tabelas dentro do card */
-        .anki-editor-body table { border-collapse: collapse; width: 100%; margin: 5px 0; border: 1px solid #000; }
-        .anki-editor-body th, .anki-editor-body td { border: 1px solid #000; padding: 4px; }
-        
-        /* Abas de Tipo */
-        .tab-btn {
-            padding: 0.5rem 1rem;
-            font-weight: 600;
-            font-size: 0.9rem;
-            color: #64748b;
-            border-bottom: 2px solid transparent;
-            transition: all 0.2s;
-        }
-        .tab-btn:hover { color: #0284c7; background: #f0f9ff; }
-        .tab-btn.active { color: #0284c7; border-bottom-color: #0284c7; }
+        /* ABAS PRINCIPAIS (MEUS ARQUIVOS) */
+        .main-nav-tab { padding: 0 20px; height: 100%; display: flex; align-items: center; gap: 8px; cursor: pointer; border-bottom: 3px solid transparent; color: #64748b; font-weight: 600; font-size: 14px; transition: all 0.2s; }
+        .main-nav-tab:hover { color: #0284c7; background: #f8fafc; }
+        .main-nav-tab.active { color: #0284c7; border-bottom-color: #0284c7; }
 
-        /* Popover de Cores */
-        .color-popover {
-            position: absolute; background: white; border: 1px solid #cbd5e1;
-            padding: 8px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); z-index: 100;
-            display: none; grid-template-columns: repeat(4, 1fr); gap: 4px; width: 140px;
-        }
+        /* ABAS DO MODAL (CRIAR CARD) */
+        .modal-cat-tab { flex: 1; text-align: center; padding: 10px; cursor: pointer; border: 1px solid #e2e8f0; margin-bottom: -1px; background: #f8fafc; color: #94a3b8; font-weight: 600; font-size: 13px; transition: all 0.2s; }
+        .modal-cat-tab:first-child { border-radius: 8px 0 0 8px; }
+        .modal-cat-tab:last-child { border-radius: 0 8px 8px 0; }
+        .modal-cat-tab.active { background: #fff; color: #0284c7; border-color: #0284c7; z-index: 10; border-bottom-color: white; }
+        
+        /* OCLUSÃO */
+        .cloze-bracket { color: #2563eb; font-weight: 800; background-color: #dbeafe; padding: 0 4px; border-radius: 4px; border: 1px dashed #2563eb; }
+        .cloze-revealed { color: #166534; font-weight: 800; background-color: #dcfce7; padding: 0 4px; border-radius: 4px; border: 1px solid #16a34a; }
+
+        .deck-actions { position: absolute; top: 10px; right: 10px; display: flex; gap: 5px; opacity: 0; transition: opacity 0.2s; }
+        .group:hover .deck-actions { opacity: 1; }
+        .btn-deck-action { width: 26px; height: 26px; border-radius: 50%; background: white; display: flex; align-items: center; justify-content: center; font-size: 11px; color: #64748b; border: 1px solid #e2e8f0; cursor: pointer; z-index: 20; }
+        .btn-deck-action:hover { color: #0284c7; border-color: #0284c7; }
+        .btn-deck-action.del:hover { color: #ef4444; border-color: #ef4444; }
+
+        .color-popover { position: absolute; background: white; border: 1px solid #cbd5e1; padding: 8px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); z-index: 60; display: none; grid-template-columns: repeat(4, 1fr); gap: 4px; width: 140px; }
         .color-popover.show { display: grid; }
         .color-swatch { width: 24px; height: 24px; border-radius: 4px; cursor: pointer; border: 1px solid #e2e8f0; }
+        .card-html-content table { border-collapse: collapse; width: 100%; border: 1px solid #000; margin: 5px 0; }
+        .card-html-content th, .card-html-content td { border: 1px solid #000; padding: 4px; font-size: 0.9em; }
+
+        .config-tab-btn { flex: 1; text-align: center; padding: 12px; font-weight: 600; color: #64748b; border-bottom: 2px solid transparent; cursor: pointer; }
+        .config-tab-btn.active { color: #0284c7; border-bottom-color: #0284c7; background: #f8fafc; }
+        
+        .rating-badge { font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 700; text-transform: uppercase; }
+        .rating-again { background: #fee2e2; color: #dc2626; }
+        .rating-hard { background: #ffedd5; color: #ea580c; }
+        .rating-good { background: #dcfce7; color: #16a34a; }
+        .rating-easy { background: #e0f2fe; color: #0284c7; }
+        .rating-none { background: #f1f5f9; color: #94a3b8; }
     </style>
 </head>
 <body class="bg-gray-100 text-gray-800 h-screen flex overflow-hidden font-sans">
@@ -115,24 +77,26 @@
         
         <header class="bg-white border-b border-gray-200 shadow-sm shrink-0 z-20">
             <div class="h-16 px-6 flex justify-between items-center">
-                <div class="flex items-center gap-6">
-                    <h1 class="text-xl font-bold text-gray-800 flex items-center gap-2">
+                <div class="h-full flex items-center gap-6">
+                    <h1 class="text-xl font-bold text-gray-800 flex items-center gap-2 mr-4">
                         <i class="fa-solid fa-layer-group text-sky-600"></i> Flashcards
                     </h1>
-                    
-                    <div class="flex h-16 items-end">
-                        <button onclick="window.switchTab('law')" id="tabLaw" class="tab-btn active h-12 flex items-center">
-                            <i class="fa-solid fa-scale-balanced mr-2"></i> Conteúdo Direito
-                        </button>
-                        <button onclick="window.switchTab('juris')" id="tabJuris" class="tab-btn h-12 flex items-center">
-                            <i class="fa-solid fa-gavel mr-2"></i> Jurisprudência
-                        </button>
+                    <div class="flex h-full" id="mainNavContainer">
+                        <div class="main-nav-tab active" onclick="window.switchMainTab('conteudo')" id="nav-conteudo">
+                            <i class="fa-solid fa-book-open"></i> Conteúdo
+                        </div>
+                        <div class="main-nav-tab" onclick="window.switchMainTab('jurisprudencia')" id="nav-juris">
+                            <i class="fa-solid fa-gavel"></i> Jurisprudência
+                        </div>
                     </div>
                 </div>
 
                 <div class="flex gap-3">
                     <button id="btnBackToDecks" onclick="window.showDecksView()" class="hidden px-4 py-2 text-sm font-bold text-gray-500 hover:text-sky-600 transition">
                         <i class="fa-solid fa-arrow-left mr-1"></i> Voltar
+                    </button>
+                    <button onclick="window.openManagerModal()" class="w-9 h-9 rounded-full bg-white border border-gray-200 text-gray-500 hover:text-sky-600 flex items-center justify-center transition shadow-sm" title="Gerenciar Cartões">
+                        <i class="fa-solid fa-list-check"></i>
                     </button>
                     <button onclick="window.openCreateModal()" class="bg-sky-600 hover:bg-sky-700 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-md transition flex items-center gap-2">
                         <i class="fa-solid fa-plus"></i> Novo Card
@@ -143,147 +107,227 @@
 
         <div class="flex-1 overflow-y-auto p-6 relative">
             
-            <div id="viewDecks" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                </div>
+            <div id="viewDecks" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 pb-20"></div>
 
-            <div id="viewStudy" class="hidden h-full flex flex-col items-center justify-center max-w-3xl mx-auto">
-                
-                <div class="w-full mb-4 flex justify-between items-end px-4">
+            <div id="viewStudy" class="hidden h-full flex flex-col items-center justify-start pt-4 max-w-4xl mx-auto overflow-y-auto pb-20">
+                <div class="w-full mb-4 flex justify-between items-end px-4 shrink-0">
                     <span id="studyCounter" class="text-xs font-bold text-gray-400 uppercase">0 restantes</span>
                     <span id="deckTitleDisplay" class="text-sm font-bold text-sky-700"></span>
                 </div>
 
-                <div class="w-full h-[500px] perspective-1000 group cursor-pointer mb-8" onclick="window.flipCard()">
-                    <div id="flashcard" class="flashcard-inner shadow-xl rounded-3xl">
-                        <div class="flashcard-face flashcard-front border border-gray-200">
-                            <span class="absolute top-6 left-6 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Pergunta</span>
-                            <div id="cardFrontText" class="text-lg text-center leading-relaxed w-full px-4 overflow-auto max-h-full">Carregando...</div>
-                            <div class="absolute bottom-4 text-xs text-gray-400 animate-pulse">Clique para ver a resposta</div>
+                <div class="w-full mb-8 cursor-pointer" onclick="window.revealCard()">
+                    <div id="flashcardContainer" class="flashcard-container">
+                        <div class="flashcard-section flashcard-front relative">
+                            <div id="cardTypeBadge" class="absolute top-0 right-0 bg-gray-100 text-gray-500 text-[10px] font-bold px-3 py-1 rounded-bl-xl uppercase tracking-wider">Geral</div>
+                            <span id="lblFrontDisplay" class="absolute top-4 left-6 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Pergunta</span>
+                            <div id="cardFrontText" class="text-lg text-center leading-relaxed w-full px-4 mt-4 card-html-content"></div>
+                            <div id="tapToRevealHint" class="text-xs text-gray-400 text-center mt-8 animate-pulse">
+                                <i class="fa-regular fa-hand-pointer mr-1"></i> Clique para ver a resposta
+                            </div>
                         </div>
-                        <div class="flashcard-face flashcard-back">
-                            <span class="absolute top-6 left-6 text-[10px] font-bold text-sky-600 uppercase tracking-widest">Resposta</span>
-                            <div id="cardBackText" class="text-lg text-center leading-relaxed w-full px-4 overflow-auto max-h-full">...</div>
+                        <div class="flashcard-section flashcard-back relative">
+                            <span id="lblBackDisplay" class="absolute top-4 left-6 text-[10px] font-bold text-sky-600 uppercase tracking-widest">Resposta</span>
+                            <div id="cardBackText" class="text-base text-center leading-relaxed w-full px-4 mt-4 mb-4 card-html-content"></div>
+                            <div id="cardFooterInfo" class="bg-sky-100 p-3 rounded-lg border border-sky-200 flex flex-col gap-1 text-center hidden mt-4">
+                                <div id="cardLegalBasis" class="text-xs text-sky-800 font-medium italic"></div>
+                                <a id="cardExternalLink" href="#" target="_blank" class="text-[10px] font-bold text-sky-600 hover:underline flex items-center justify-center gap-1"><i class="fa-solid fa-external-link-alt"></i> Ver Link</a>
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                <div id="studyControls" class="opacity-0 pointer-events-none transition-opacity duration-300 flex gap-4 w-full justify-center">
-                    <button onclick="window.rateCard('again')" class="btn-ans flex-1 max-w-[120px] py-3 rounded-xl bg-red-100 text-red-600 font-bold text-sm border border-red-200 shadow-sm hover:bg-red-200">
-                        <div class="text-[10px] opacity-70 mb-1">Errei</div>
-                        <1 min
+                <div id="studyControls" class="opacity-0 pointer-events-none transition-opacity duration-300 flex gap-4 w-full justify-center shrink-0 mb-6">
+                    <button onclick="window.rateCard('again')" class="btn-ans flex-1 max-w-[120px] py-3 rounded-xl bg-red-100 text-red-600 font-bold text-sm border border-red-200 shadow-sm hover:bg-red-200 flex flex-col items-center">
+                        <span class="text-[10px] opacity-70 mb-1">Errei</span>
+                        <span id="timeAgain" class="text-xs">1 min</span>
                     </button>
-                    <button onclick="window.rateCard('hard')" class="btn-ans flex-1 max-w-[120px] py-3 rounded-xl bg-orange-100 text-orange-600 font-bold text-sm border border-orange-200 shadow-sm hover:bg-orange-200">
-                        <div class="text-[10px] opacity-70 mb-1">Difícil</div>
-                        1 dia
+                    <button onclick="window.rateCard('hard')" class="btn-ans flex-1 max-w-[120px] py-3 rounded-xl bg-orange-100 text-orange-600 font-bold text-sm border border-orange-200 shadow-sm hover:bg-orange-200 flex flex-col items-center">
+                        <span class="text-[10px] opacity-70 mb-1">Difícil</span>
+                        <span id="timeHard" class="text-xs">1 dia</span>
                     </button>
-                    <button onclick="window.rateCard('good')" class="btn-ans flex-1 max-w-[120px] py-3 rounded-xl bg-green-100 text-green-600 font-bold text-sm border border-green-200 shadow-sm hover:bg-green-200">
-                        <div class="text-[10px] opacity-70 mb-1">Bom</div>
-                        3 dias
+                    <button onclick="window.rateCard('good')" class="btn-ans flex-1 max-w-[120px] py-3 rounded-xl bg-green-100 text-green-600 font-bold text-sm border border-green-200 shadow-sm hover:bg-green-200 flex flex-col items-center">
+                        <span class="text-[10px] opacity-70 mb-1">Bom</span>
+                        <span id="timeGood" class="text-xs">3 dias</span>
                     </button>
-                    <button onclick="window.rateCard('easy')" class="btn-ans flex-1 max-w-[120px] py-3 rounded-xl bg-sky-100 text-sky-600 font-bold text-sm border border-sky-200 shadow-sm hover:bg-sky-200">
-                        <div class="text-[10px] opacity-70 mb-1">Fácil</div>
-                        5 dias
+                    <button onclick="window.rateCard('easy')" class="btn-ans flex-1 max-w-[120px] py-3 rounded-xl bg-sky-100 text-sky-600 font-bold text-sm border border-sky-200 shadow-sm hover:bg-sky-200 flex flex-col items-center">
+                        <span class="text-[10px] opacity-70 mb-1">Fácil</span>
+                        <span id="timeEasy" class="text-xs">5 dias</span>
                     </button>
                 </div>
             </div>
 
             <div id="viewEmpty" class="hidden h-full flex flex-col items-center justify-center text-center">
-                <div class="w-20 h-20 bg-green-100 text-green-500 rounded-full flex items-center justify-center text-3xl mb-4 shadow-sm">
-                    <i class="fa-solid fa-check"></i>
-                </div>
+                <div class="w-20 h-20 bg-green-100 text-green-500 rounded-full flex items-center justify-center text-3xl mb-4 shadow-sm"><i class="fa-solid fa-check"></i></div>
                 <h2 class="text-2xl font-bold text-gray-800">Parabéns!</h2>
                 <p class="text-gray-500 mt-2">Você revisou todos os cards deste baralho por hoje.</p>
                 <button onclick="window.showDecksView()" class="mt-6 px-6 py-2 bg-sky-600 text-white rounded-lg font-bold shadow-md hover:bg-sky-700 transition">Voltar aos Baralhos</button>
             </div>
-
         </div>
     </main>
+
+    <div id="deckConfigModal" class="fixed inset-0 bg-black/60 hidden z-50 flex items-center justify-center backdrop-blur-sm">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl h-[80vh] flex flex-col overflow-hidden border border-white/50">
+            <div class="bg-gray-50 px-6 py-4 border-b border-gray-200 flex justify-between items-center shrink-0">
+                <h3 class="text-lg font-bold text-gray-800" id="deckConfigTitle">Configurações</h3>
+                <button onclick="window.closeDeckConfigModal()" class="text-gray-400 hover:text-red-500"><i class="fa-solid fa-xmark text-xl"></i></button>
+            </div>
+            <div class="flex border-b border-gray-200">
+                <button class="config-tab-btn active" onclick="window.switchConfigTab('settings')"><i class="fa-solid fa-sliders mr-2"></i>Parâmetros</button>
+                <button class="config-tab-btn" onclick="window.switchConfigTab('history')"><i class="fa-solid fa-clock-rotate-left mr-2"></i>Histórico</button>
+            </div>
+            <div class="flex-1 overflow-y-auto p-6 bg-gray-50/50">
+                <div id="tabSettingsView">
+                    <h4 class="text-xs font-bold text-gray-400 uppercase mb-4">Multiplicadores de Intervalo</h4>
+                    <div class="grid grid-cols-2 gap-6">
+                        <div>
+                            <label class="block text-xs font-bold text-gray-600 mb-1">Fácil (Bônus)</label>
+                            <input type="number" id="cfgEasyBonus" step="0.1" class="w-full border p-2 rounded" placeholder="Padrão: 3.5">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-600 mb-1">Bom (Intervalo)</label>
+                            <input type="number" id="cfgGoodInterval" step="0.1" class="w-full border p-2 rounded" placeholder="Padrão: 2.5">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-600 mb-1">Difícil</label>
+                            <input type="number" id="cfgHardInterval" step="0.1" class="w-full border p-2 rounded" placeholder="Padrão: 1.2">
+                        </div>
+                    </div>
+                    <button onclick="window.saveDeckConfig()" class="mt-6 bg-sky-600 text-white px-6 py-2 rounded-lg font-bold shadow-sm hover:bg-sky-700 w-full">Salvar Alterações</button>
+                </div>
+                <div id="tabHistoryView" class="hidden">
+                    <div class="overflow-hidden border border-gray-200 rounded-lg bg-white">
+                        <table class="w-full text-left text-sm">
+                            <thead class="bg-gray-100 border-b border-gray-200">
+                                <tr>
+                                    <th class="p-3 font-bold text-gray-600">Card (Frente)</th>
+                                    <th class="p-3 font-bold text-gray-600 text-center">Última</th>
+                                    <th class="p-3 font-bold text-gray-600 text-right">Data</th>
+                                </tr>
+                            </thead>
+                            <tbody id="deckHistoryBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <div id="createModal" class="fixed inset-0 bg-black/60 hidden z-50 flex items-center justify-center backdrop-blur-sm">
         <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl h-[90vh] flex flex-col overflow-hidden border border-white/50">
             <div class="bg-gray-50 px-6 py-4 border-b border-gray-200 flex justify-between items-center shrink-0">
-                <h3 class="text-lg font-bold text-gray-800">Novo Flashcard</h3>
+                <h3 id="modalTitleText" class="text-lg font-bold text-gray-800">Novo Flashcard</h3>
                 <button onclick="window.closeCreateModal()" class="text-gray-400 hover:text-red-500"><i class="fa-solid fa-xmark text-xl"></i></button>
             </div>
             
             <div class="flex-1 overflow-y-auto p-6 space-y-5">
+                <input type="hidden" id="inputCardId"> 
+
+                <div class="flex">
+                    <div id="tabModalConteudo" class="modal-cat-tab active" onclick="window.setModalCategory('conteudo')">
+                        <i class="fa-solid fa-book-open mr-1"></i> Conteúdo de Direito
+                    </div>
+                    <div id="tabModalJuris" class="modal-cat-tab" onclick="window.setModalCategory('jurisprudencia')">
+                        <i class="fa-solid fa-gavel mr-1"></i> Jurisprudência
+                    </div>
+                </div>
+                <input type="hidden" id="inputCategory">
+
                 <div class="grid grid-cols-2 gap-4">
                     <div>
-                        <label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">Tipo de Card</label>
-                        <select id="inputType" class="w-full border border-gray-200 rounded-lg p-2 text-sm font-bold text-gray-700 focus:outline-none focus:border-sky-400">
-                            <option value="law">Conteúdo de Direito</option>
-                            <option value="juris">Jurisprudência</option>
+                        <label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">Formato do Card</label>
+                        <select id="inputCardFormat" onchange="window.toggleFormatUI()" class="w-full border border-gray-200 rounded-lg p-2.5 text-sm font-bold text-gray-700 focus:border-sky-400 outline-none">
+                            <option value="basic">Tradicional (Frente/Verso)</option>
+                            <option value="cloze">Oclusão (Cloze)</option>
                         </select>
                     </div>
                     <div>
-                        <label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">Baralho (Matéria)</label>
-                        <input type="text" id="inputDeckName" list="deckSuggestions" class="w-full border border-gray-200 rounded-lg p-2 text-sm font-bold text-gray-700 focus:outline-none focus:border-sky-400" placeholder="Ex: Penal Geral">
+                        <label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">Baralho</label>
+                        <input type="text" id="inputDeckName" list="deckSuggestions" class="w-full border border-gray-200 rounded-lg p-2.5 focus:border-sky-400 outline-none text-sm font-bold text-gray-700" placeholder="Ex: Penal - Parte Geral">
                         <datalist id="deckSuggestions"></datalist>
                     </div>
                 </div>
 
                 <div>
-                    <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Frente (Pergunta)</label>
-                    <div class="anki-editor-container">
-                        <div class="anki-toolbar" id="toolbarFront">
-                            <button class="tb-btn" onmousedown="event.preventDefault(); document.execCommand('bold')"><i class="fa-solid fa-bold"></i></button>
-                            <button class="tb-btn" onmousedown="event.preventDefault(); document.execCommand('italic')"><i class="fa-solid fa-italic"></i></button>
-                            <button class="tb-btn" onmousedown="event.preventDefault(); document.execCommand('underline')"><i class="fa-solid fa-underline"></i></button>
-                            <div class="w-px h-5 bg-gray-300 mx-1"></div>
-                            <button class="tb-btn" onmousedown="event.preventDefault(); window.toggleColorPopover('frontColor')"><i class="fa-solid fa-font text-red-500"></i></button>
-                            <button class="tb-btn" onmousedown="event.preventDefault(); window.toggleColorPopover('frontHilite')"><i class="fa-solid fa-highlighter text-yellow-400"></i></button>
-                        </div>
-                        <div id="popover-frontColor" class="color-popover">
-                            <div class="color-swatch bg-black" onmousedown="event.preventDefault(); window.applyColor('foreColor', '#000000')"></div>
-                            <div class="color-swatch bg-red-600" onmousedown="event.preventDefault(); window.applyColor('foreColor', '#dc2626')"></div>
-                            <div class="color-swatch bg-blue-600" onmousedown="event.preventDefault(); window.applyColor('foreColor', '#2563eb')"></div>
-                            <div class="color-swatch bg-green-600" onmousedown="event.preventDefault(); window.applyColor('foreColor', '#16a34a')"></div>
-                        </div>
-                        <div id="popover-frontHilite" class="color-popover">
-                            <div class="color-swatch bg-yellow-200" onmousedown="event.preventDefault(); window.applyColor('hiliteColor', '#fef08a')"></div>
-                            <div class="color-swatch bg-green-200" onmousedown="event.preventDefault(); window.applyColor('hiliteColor', '#bbf7d0')"></div>
-                            <div class="color-swatch bg-pink-200" onmousedown="event.preventDefault(); window.applyColor('hiliteColor', '#fbcfe8')"></div>
-                             <div class="color-swatch bg-white border border-gray-300 flex items-center justify-center" onmousedown="event.preventDefault(); window.applyColor('hiliteColor', 'transparent')"><i class="fa-solid fa-ban text-[10px]"></i></div>
-                        </div>
-
-                        <div id="editorFront" class="anki-editor-body" contenteditable="true" placeholder="Digite a pergunta..."></div>
+                    <label id="lblFrontEditor" class="block text-[10px] font-bold text-gray-400 uppercase mb-1 ml-1">Frente (Pergunta)</label>
+                    <div class="editor-toolbar" id="toolbarFront">
+                        <button class="nt-btn" onmousedown="event.preventDefault(); window.execCmd('bold')"><i class="fa-solid fa-bold"></i></button>
+                        <button class="nt-btn" onmousedown="event.preventDefault(); window.execCmd('italic')"><i class="fa-solid fa-italic"></i></button>
+                        <button class="nt-btn" onmousedown="event.preventDefault(); window.execCmd('underline')"><i class="fa-solid fa-underline"></i></button>
+                        <div class="w-px h-4 bg-gray-300 mx-1"></div>
+                        <button id="btnClozeAction" class="nt-btn text-blue-600 w-auto px-2 hidden" onmousedown="event.preventDefault(); window.wrapCloze()">[...]<span class="text-[9px] ml-1 font-bold">Cloze</span></button>
+                        <div class="w-px h-4 bg-gray-300 mx-1"></div>
+                        <button class="nt-btn" onmousedown="event.preventDefault(); window.toggleColorPopover(this, 'front')"><i class="fa-solid fa-palette text-purple-500"></i></button>
+                        <button class="nt-btn" onmousedown="event.preventDefault(); window.execCmd('removeFormat')"><i class="fa-solid fa-eraser"></i></button>
                     </div>
+                    <div id="inputFront" class="editor-content" contenteditable="true" placeholder="Digite aqui..."></div>
                 </div>
 
                 <div>
-                    <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Verso (Resposta)</label>
-                    <div class="anki-editor-container border-sky-200">
-                        <div class="anki-toolbar bg-sky-50">
-                            <button class="tb-btn" onmousedown="event.preventDefault(); document.execCommand('bold')"><i class="fa-solid fa-bold"></i></button>
-                            <button class="tb-btn" onmousedown="event.preventDefault(); document.execCommand('italic')"><i class="fa-solid fa-italic"></i></button>
-                            <button class="tb-btn" onmousedown="event.preventDefault(); document.execCommand('underline')"><i class="fa-solid fa-underline"></i></button>
-                            <button class="tb-btn" onmousedown="event.preventDefault(); window.insertTable()"><i class="fa-solid fa-table"></i></button>
-                            <div class="w-px h-5 bg-gray-300 mx-1"></div>
-                            <button class="tb-btn" onmousedown="event.preventDefault(); window.toggleColorPopover('backColor')"><i class="fa-solid fa-font text-red-500"></i></button>
-                            <button class="tb-btn" onmousedown="event.preventDefault(); window.toggleColorPopover('backHilite')"><i class="fa-solid fa-highlighter text-yellow-400"></i></button>
-                        </div>
-                         <div id="popover-backColor" class="color-popover">
-                            <div class="color-swatch bg-black" onmousedown="event.preventDefault(); window.applyColor('foreColor', '#000000')"></div>
-                            <div class="color-swatch bg-red-600" onmousedown="event.preventDefault(); window.applyColor('foreColor', '#dc2626')"></div>
-                            <div class="color-swatch bg-blue-600" onmousedown="event.preventDefault(); window.applyColor('foreColor', '#2563eb')"></div>
-                            <div class="color-swatch bg-green-600" onmousedown="event.preventDefault(); window.applyColor('foreColor', '#16a34a')"></div>
-                        </div>
-                        <div id="popover-backHilite" class="color-popover">
-                            <div class="color-swatch bg-yellow-200" onmousedown="event.preventDefault(); window.applyColor('hiliteColor', '#fef08a')"></div>
-                            <div class="color-swatch bg-green-200" onmousedown="event.preventDefault(); window.applyColor('hiliteColor', '#bbf7d0')"></div>
-                            <div class="color-swatch bg-pink-200" onmousedown="event.preventDefault(); window.applyColor('hiliteColor', '#fbcfe8')"></div>
-                            <div class="color-swatch bg-white border border-gray-300 flex items-center justify-center" onmousedown="event.preventDefault(); window.applyColor('hiliteColor', 'transparent')"><i class="fa-solid fa-ban text-[10px]"></i></div>
-                        </div>
-                        <div id="editorBack" class="anki-editor-body bg-sky-50/30" contenteditable="true" placeholder="Digite a resposta..."></div>
+                    <label id="lblBackEditor" class="block text-[10px] font-bold text-gray-400 uppercase mb-1 ml-1">Verso (Resposta)</label>
+                    <div class="editor-toolbar" id="toolbarBack">
+                        <button class="nt-btn" onmousedown="event.preventDefault(); window.execCmd('bold')"><i class="fa-solid fa-bold"></i></button>
+                        <button class="nt-btn" onmousedown="event.preventDefault(); window.execCmd('italic')"><i class="fa-solid fa-italic"></i></button>
+                        <button class="nt-btn" onmousedown="event.preventDefault(); window.execCmd('insertUnorderedList')"><i class="fa-solid fa-list-ul"></i></button>
+                        <button class="nt-btn" onmousedown="event.preventDefault(); window.toggleColorPopover(this, 'back')"><i class="fa-solid fa-palette text-purple-500"></i></button>
                     </div>
+                    <div id="inputBack" class="editor-content bg-sky-50/30" contenteditable="true" placeholder="Resposta..."></div>
                 </div>
 
+                <div class="grid grid-cols-2 gap-4 pt-2 border-t border-gray-100">
+                    <div>
+                        <label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">Fundamentação Legal</label>
+                        <input type="text" id="inputLegalBasis" class="w-full border border-gray-200 rounded-lg p-2 text-xs text-gray-700 focus:border-sky-400 outline-none" placeholder="Ex: Art. 5º, CF/88">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">Link Externo</label>
+                        <input type="url" id="inputLink" class="w-full border border-gray-200 rounded-lg p-2 text-xs text-gray-700 focus:border-sky-400 outline-none" placeholder="https://...">
+                    </div>
+                </div>
             </div>
-
-            <div class="p-4 bg-gray-50 border-t border-gray-200 shrink-0">
-                <button onclick="window.saveNewCard()" class="w-full bg-sky-600 hover:bg-sky-700 text-white font-bold py-3 rounded-xl shadow-lg transition">Salvar Card</button>
+            <div class="bg-gray-50 px-6 py-4 border-t border-gray-200 shrink-0">
+                <button onclick="window.saveCard()" class="w-full bg-sky-600 hover:bg-sky-700 text-white font-bold py-3 rounded-xl shadow-lg transition transform hover:-translate-y-0.5">Salvar Card</button>
             </div>
         </div>
+    </div>
+
+    <div id="managerModal" class="fixed inset-0 bg-black/60 hidden z-50 flex items-center justify-center backdrop-blur-sm">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl h-[85vh] flex flex-col overflow-hidden border border-white/50">
+            <div class="bg-gray-50 px-6 py-4 border-b border-gray-200 flex justify-between items-center shrink-0">
+                <h3 class="text-xl font-bold text-gray-800"><i class="fa-solid fa-list-check text-sky-600 mr-2"></i> Gerenciador</h3>
+                <button onclick="window.closeManagerModal()" class="text-gray-400 hover:text-red-500"><i class="fa-solid fa-xmark text-xl"></i></button>
+            </div>
+            <div class="bg-white p-4 border-b border-gray-100 flex gap-3">
+                <div class="relative flex-1">
+                    <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+                    <input type="text" id="managerSearch" oninput="window.renderManagerList()" placeholder="Buscar..." class="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:border-sky-500 outline-none">
+                </div>
+                <select id="managerFilterDeck" onchange="window.renderManagerList()" class="border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-600 outline-none font-bold">
+                    <option value="todos">Todos os Baralhos</option>
+                </select>
+            </div>
+            <div class="flex-1 overflow-y-auto p-0">
+                <table class="w-full text-left border-collapse">
+                    <thead class="bg-gray-50 sticky top-0 z-10 shadow-sm">
+                        <tr>
+                            <th class="p-4 text-xs font-bold text-gray-500 uppercase w-16">#</th>
+                            <th class="p-4 text-xs font-bold text-gray-500 uppercase w-32">Tipo</th>
+                            <th class="p-4 text-xs font-bold text-gray-500 uppercase w-48">Baralho</th>
+                            <th class="p-4 text-xs font-bold text-gray-500 uppercase">Frente</th>
+                            <th class="p-4 text-xs font-bold text-gray-500 uppercase w-24 text-center">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody id="managerTableBody" class="text-sm text-gray-700"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div id="popover-color" class="color-popover">
+        <div class="color-swatch bg-black" onmousedown="event.preventDefault(); window.applyColor('#000000')"></div>
+        <div class="color-swatch bg-red-600" onmousedown="event.preventDefault(); window.applyColor('#dc2626')"></div>
+        <div class="color-swatch bg-blue-600" onmousedown="event.preventDefault(); window.applyColor('#2563eb')"></div>
+        <div class="color-swatch bg-green-600" onmousedown="event.preventDefault(); window.applyColor('#16a34a')"></div>
+        <div class="color-swatch bg-yellow-400" onmousedown="event.preventDefault(); window.applyColor('#facc15')"></div>
     </div>
 
     <script type="module" src="anki.js"></script>
