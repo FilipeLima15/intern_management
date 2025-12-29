@@ -26,12 +26,38 @@
             box-shadow: inset 0 -2px 4px rgba(0, 0, 0, 0.02), inset 0 1px 2px rgba(255, 255, 255, 0.5);
             border-bottom: 1px solid rgba(241, 245, 249, 0.8); backdrop-filter: blur(5px);
         }
+        
+        /* BOTÕES DE AÇÃO DO CARD */
         .card-action-btn {
             position: absolute; right: 8px; width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; opacity: 0; transition: all 0.2s ease-in-out; z-index: 20; cursor: pointer; color: #94a3b8; background: rgba(255, 255, 255, 0.8); box-shadow: 0 2px 4px rgba(0,0,0,0.05); backdrop-filter: blur(4px);
         }
         .info-card:hover .card-action-btn { opacity: 1; }
-        .btn-delete-card { top: 8px; } .btn-delete-card:hover { background: #fee2e2; color: #ef4444; transform: scale(1.1); box-shadow: 0 4px 6px rgba(239, 68, 68, 0.2); }
-        .btn-reset-card { top: 38px; } .btn-reset-card:hover { background: #e2e8f0; color: #334155; transform: rotate(-180deg) scale(1.1); box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        
+        .btn-delete-card { top: 8px; } 
+        .btn-delete-card:hover { background: #fee2e2; color: #ef4444; transform: scale(1.1); box-shadow: 0 4px 6px rgba(239, 68, 68, 0.2); }
+        
+        .btn-reset-card { top: 38px; } 
+        .btn-reset-card:hover { background: #e2e8f0; color: #334155; transform: rotate(-180deg) scale(1.1); box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+
+        /* Novo Botão: Cancelar/Superado */
+        .btn-cancel-card { top: 68px; }
+        .btn-cancel-card:hover { background: #fef2f2; color: #ef4444; transform: scale(1.1); }
+        .btn-cancel-card.active { color: #ef4444; background: #fee2e2; opacity: 1; }
+
+        /* ESTILO DE ITEM CANCELADO */
+        .canceled-item .info-num {
+            text-decoration: line-through;
+            text-decoration-color: #ef4444;
+            text-decoration-thickness: 4px;
+            color: rgba(239, 68, 68, 0.4) !important; /* Vermelho claro */
+        }
+        .canceled-badge {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-15deg);
+            border: 2px solid #ef4444; color: #ef4444; font-weight: 900; font-size: 1.2rem;
+            padding: 0.2rem 0.5rem; border-radius: 8px; text-transform: uppercase;
+            background: rgba(255,255,255,0.9); pointer-events: none; z-index: 15;
+            box-shadow: 0 4px 10px rgba(239, 68, 68, 0.2);
+        }
 
         /* --- ESTILOS DE REVISÃO --- */
         .rev-container-modern {
@@ -129,8 +155,18 @@
                     <select id="anoSelect" onchange="mudarAno(this.value)" class="bg-transparent border-none text-gray-700 text-sm focus:ring-0 block outline-none font-bold cursor-pointer w-20"></select>
                 </div>
 
+                <div id="filterCanceledContainer" class="hidden flex items-center">
+                    <button id="btnToggleCanceled" onclick="window.toggleHideCanceled()" class="w-9 h-9 rounded-xl bg-white text-gray-400 border border-gray-200 shadow-sm hover:text-sky-600 hover:border-sky-200 flex items-center justify-center transition" title="Ocultar/Mostrar Canceladas">
+                        <i class="fa-solid fa-eye"></i>
+                    </button>
+                </div>
+
                 <button id="btnSort" onclick="window.toggleSort()" class="w-9 h-9 rounded-xl bg-white text-gray-500 border border-gray-200 shadow-sm hover:text-sky-600 hover:border-sky-200 flex items-center justify-center transition" title="Inverter Ordem">
                     <i class="fa-solid fa-arrow-down-9-1"></i>
+                </button>
+
+                <button id="btnDeleteAll" onclick="window.excluirTodosVisiveis()" class="w-9 h-9 rounded-xl bg-white text-red-300 border border-gray-200 shadow-sm hover:text-white hover:bg-red-500 hover:border-red-500 flex items-center justify-center transition" title="Excluir TODOS visíveis">
+                    <i class="fa-solid fa-trash-can"></i>
                 </button>
             </div>
         </div>
@@ -184,12 +220,13 @@
     </div>
 
     <script type="module">
-        console.log("🚀 Iniciando Script Jurisprudência (Fix & Filter)...");
+        console.log("🚀 Iniciando Script Jurisprudência (Versão Super/DeleteAll)...");
 
         import { db, auth } from "./firebase-config.js";
         import { ref, set, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
         import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
+        // --- ESTADO GLOBAL ---
         let databases = {
             'informativos': { 'STF': {}, 'STJ': {} },
             'sumulas': { 'STF - Vinculante': {}, 'STF': {}, 'STJ': {} },
@@ -199,11 +236,14 @@
         };
         
         let leituras = {};
+        let statusFlags = {}; // Armazena { 'ID': 'canceled' }
+        
         let currentMode = 'informativos'; 
         let tribunalAtual = 'STF';
         let anoAtual = new Date().getFullYear().toString();
         let currentUserUID = null;
-        let sortDesc = true; // Estado da ordenação
+        let sortDesc = true; 
+        let hideCanceled = false; // Estado do filtro de canceladas
 
         const cardTitles = {
             'informativos': 'INFORMATIVO',
@@ -213,6 +253,7 @@
             'jur-teses': 'JUR. TESES'
         };
 
+        // --- AUTH ---
         onAuthStateChanged(auth, (user) => {
             if (user) {
                 currentUserUID = user.uid;
@@ -237,10 +278,12 @@
                     const data = snapshot.val();
                     if(data.databases) databases = data.databases;
                     
+                    // Inicialização de segurança
                     if(!databases['informativos']) databases['informativos'] = { 'STF': {}, 'STJ': {} };
                     if(!databases['sumulas']) databases['sumulas'] = { 'STF - Vinculante': {}, 'STF': {}, 'STJ': {} };
                     
                     if(data.leituras) leituras = data.leituras;
+                    if(data.statusFlags) statusFlags = data.statusFlags;
                 }
                 init(); 
             } catch (error) {
@@ -248,6 +291,7 @@
             }
         }
 
+        // --- SAVE FUNCTIONS ---
         async function salvarDb() {
             if(!currentUserUID) return alert("Você precisa estar logado.");
             try {
@@ -255,9 +299,7 @@
                 renderTribunalTabs();
                 carregarAnosNoSelect();
                 gerarGrid();
-            } catch (e) {
-                console.error("Erro ao salvar DB:", e);
-            }
+            } catch (e) { console.error("Erro ao salvar DB:", e); }
         }
 
         async function salvarLeituras() { 
@@ -268,6 +310,15 @@
             } catch (e) { console.error("Erro ao salvar leituras:", e); }
         }
 
+        async function salvarStatusFlags() {
+            if(!currentUserUID) return;
+            try {
+                await set(getUserRef('statusFlags'), statusFlags);
+                gerarGrid();
+            } catch(e) { console.error("Erro ao salvar status:", e); }
+        }
+
+        // --- LOGIC ---
         function init() {
             mudarModo(currentMode);
         }
@@ -278,6 +329,14 @@
             const activeBtn = document.getElementById(`nav-${modo}`);
             if(activeBtn) activeBtn.classList.add('active');
             
+            // Controle de visualização do botão de "Canceladas"
+            const filterCanceledContainer = document.getElementById('filterCanceledContainer');
+            if(modo === 'informativos') {
+                filterCanceledContainer.classList.add('hidden');
+            } else {
+                filterCanceledContainer.classList.remove('hidden');
+            }
+
             const dbRef = databases[currentMode] || {};
             const keys = Object.keys(dbRef);
             const priority = ['STF - Vinculante', 'STF', 'STJ', 'TST'];
@@ -402,7 +461,6 @@
             const dbRef = databases[currentMode];
             
             select.innerHTML = '';
-            // Opção TODOS
             const optTodos = document.createElement('option');
             optTodos.value = "todos";
             optTodos.text = "Todos";
@@ -421,7 +479,6 @@
                     select.appendChild(o);
                 });
             } else {
-                // Se não tiver anos, seleciona 'todos' ou o ano atual padrão
                 if(anoAtual !== 'todos') {
                    const o = document.createElement('option'); o.value = anoAtual; o.text = anoAtual;
                    o.selected = true; select.appendChild(o);
@@ -440,6 +497,19 @@
             gerarGrid();
         }
 
+        window.toggleHideCanceled = function() {
+            hideCanceled = !hideCanceled;
+            const btn = document.getElementById('btnToggleCanceled');
+            if(hideCanceled) {
+                btn.innerHTML = '<i class="fa-solid fa-eye-slash"></i>';
+                btn.classList.add('text-sky-600', 'border-sky-200', 'bg-sky-50');
+            } else {
+                btn.innerHTML = '<i class="fa-solid fa-eye"></i>';
+                btn.classList.remove('text-sky-600', 'border-sky-200', 'bg-sky-50');
+            }
+            gerarGrid();
+        }
+
         window.gerarGrid = function() {
             const container = document.getElementById('gridContainer');
             if(!container) return;
@@ -448,27 +518,30 @@
             const dbRef = databases[currentMode];
             if(!dbRef || !dbRef[tribunalAtual]) return;
 
-            // 1. Coleta os Itens (Considerando Ano "Todos" ou Específico)
+            // 1. Coleta Itens
             let rawList = [];
-            
             if(anoAtual === 'todos') {
-                // Pega de todos os anos disponíveis
                 const anos = Object.keys(dbRef[tribunalAtual]).filter(y => y !== '_keep');
                 anos.forEach(ano => {
                     const itensAno = dbRef[tribunalAtual][ano] || [];
                     rawList = rawList.concat(itensAno);
                 });
-                // Remove duplicatas se houver (mesmo número em anos diferentes é raro, mas seguro previnir)
                 rawList = [...new Set(rawList)];
             } else {
                 rawList = dbRef[tribunalAtual][anoAtual] || [];
             }
             
-            // 2. Filtros de Status
-            const filterStatus = document.getElementById('filterStatus').value; // todos, lidos, nao-lidos
+            // 2. Filtro de Status (Lido/Não Lido) e Cancelado
+            const filterStatus = document.getElementById('filterStatus').value;
+            
             let filteredList = rawList.filter(num => {
                 const id = getId(num);
                 const nivel = leituras[id] || 0;
+                const isCanceled = statusFlags[id] === 'canceled';
+
+                // Se "Ocultar Canceladas" estiver ativo e o item for cancelado, esconde
+                if (hideCanceled && isCanceled) return false;
+
                 if(filterStatus === 'lidos') return nivel > 0;
                 if(filterStatus === 'nao-lidos') return nivel === 0;
                 return true;
@@ -486,13 +559,12 @@
             }
 
             let totalLidosGeral = 0;
-            // Para calcular o progresso, usamos a lista bruta ou filtrada? 
-            // Geralmente progresso é sobre o que está na tela ou sobre o ano selecionado.
-            // Vamos calcular sobre o que está na tela (filtrado) para dar feedback dinâmico.
             
             filteredList.forEach(num => {
                 const id = getId(num);
                 const nivel = leituras[id] || 0;
+                const isCanceled = statusFlags[id] === 'canceled';
+                
                 if(nivel > 0) totalLidosGeral++;
                 
                 let txtColor = 'text-rev-0';
@@ -502,11 +574,30 @@
                 else if(nivel>=4) txtColor='text-rev-custom';
 
                 const card = document.createElement('div');
-                card.className = "info-card rounded-[2rem] flex flex-col items-center justify-between relative group h-[190px]";
+                let cardClasses = "info-card rounded-[2rem] flex flex-col items-center justify-between relative group h-[190px]";
+                if(isCanceled) cardClasses += " canceled-item";
+                card.className = cardClasses;
                 
+                // Botão de Cancelar (Apenas se NÃO for Informativo)
+                let btnCancelHTML = '';
+                if(currentMode !== 'informativos') {
+                    const btnClass = isCanceled ? 'card-action-btn btn-cancel-card active' : 'card-action-btn btn-cancel-card';
+                    btnCancelHTML = `<button class="${btnClass}" onclick="window.toggleCancelItem('${id}',event)" title="Cancelar/Superada"><i class="fa-solid fa-ban"></i></button>`;
+                }
+
+                // Badge de Cancelado
+                let badgeHTML = '';
+                if(isCanceled) {
+                    badgeHTML = `<div class="canceled-badge">CANCELADA</div>`;
+                }
+
                 card.innerHTML = `
                     <button class="card-action-btn btn-delete-card" onclick="window.excluirItem('${tribunalAtual}','${anoAtual === 'todos' ? encontrarAnoDoItem(num) : anoAtual}',${num},event)"><i class="fa-solid fa-trash-can"></i></button>
                     <button class="card-action-btn btn-reset-card" onclick="window.resetarLeitura('${id}',event)"><i class="fa-solid fa-rotate-left"></i></button>
+                    ${btnCancelHTML}
+                    
+                    ${badgeHTML}
+
                     <div class="card-header-bar w-full text-[10px] uppercase tracking-widest text-gray-400 font-bold py-2.5">${cardTitles[currentMode]}</div>
                     <div class="text-center flex-1 flex flex-col justify-center pb-2">
                         <span class="info-num text-5xl font-extrabold ${txtColor} leading-tight tracking-tight drop-shadow-sm">${num}</span>
@@ -538,14 +629,13 @@
             atualizarProgresso(totalLidosGeral, filteredList.length);
         }
 
-        // Helper para achar o ano quando estamos no modo "Todos"
         function encontrarAnoDoItem(num) {
             const dbRef = databases[currentMode][tribunalAtual];
             for(let ano in dbRef) {
                 if(ano === '_keep') continue;
                 if(dbRef[ano].includes(num)) return ano;
             }
-            return anoAtual; // fallback
+            return anoAtual; 
         }
 
         function atualizarProgresso(lidos, total) {
@@ -560,7 +650,80 @@
             if(txt) txt.innerText = `${p}% (${lidos}/${total})`;
         }
 
-        function executarReset() {
+        // --- ACTIONS ---
+
+        window.excluirTodosVisiveis = async function() {
+            // 1. Identificar o que está visível
+            // Recalcula a lista filtrada (igual ao gerarGrid)
+            const dbRef = databases[currentMode];
+            if(!dbRef || !dbRef[tribunalAtual]) return alert("Nada para excluir.");
+
+            let itemsToDelete = [];
+            // Coleta
+            if(anoAtual === 'todos') {
+                const anos = Object.keys(dbRef[tribunalAtual]).filter(y => y !== '_keep');
+                anos.forEach(ano => {
+                    const itensAno = dbRef[tribunalAtual][ano] || [];
+                    itemsToDelete = itemsToDelete.concat(itensAno.map(n => ({ num: n, ano: ano })));
+                });
+            } else {
+                const itensAno = dbRef[tribunalAtual][anoAtual] || [];
+                itemsToDelete = itensAno.map(n => ({ num: n, ano: anoAtual }));
+            }
+
+            // Aplica filtros atuais (Status e Canceladas)
+            const filterStatus = document.getElementById('filterStatus').value;
+            itemsToDelete = itemsToDelete.filter(item => {
+                const id = getId(item.num);
+                const nivel = leituras[id] || 0;
+                const isCanceled = statusFlags[id] === 'canceled';
+
+                if (hideCanceled && isCanceled) return false;
+                if (filterStatus === 'lidos' && nivel === 0) return false;
+                if (filterStatus === 'nao-lidos' && nivel > 0) return false;
+                return true;
+            });
+
+            if (itemsToDelete.length === 0) return alert("Nenhum item visível para excluir.");
+
+            // 2. Confirmação Dupla
+            if(!confirm(`ATENÇÃO: Você está prestes a excluir ${itemsToDelete.length} itens VISÍVEIS da tela.\n\nIsso apagará permanentemente esses itens do banco de dados.`)) return;
+            if(!confirm("Tem certeza absoluta? Essa ação não pode ser desfeita.")) return;
+
+            // 3. Execução
+            let count = 0;
+            itemsToDelete.forEach(item => {
+                // Remove do DB principal
+                if(databases[currentMode][tribunalAtual][item.ano]) {
+                    databases[currentMode][tribunalAtual][item.ano] = databases[currentMode][tribunalAtual][item.ano].filter(x => x !== item.num);
+                }
+                
+                // Remove leituras e status
+                const id = getId(item.num);
+                if(leituras[id]) delete leituras[id];
+                if(statusFlags[id]) delete statusFlags[id];
+                count++;
+            });
+
+            // 4. Salva tudo
+            await salvarDb();
+            await salvarLeituras();
+            await salvarStatusFlags(); // Salva flags atualizadas (removidas)
+            
+            alert(`${count} itens excluídos com sucesso.`);
+        };
+
+        window.toggleCancelItem = function(id, ev) {
+            ev.stopPropagation();
+            if(statusFlags[id] === 'canceled') {
+                delete statusFlags[id];
+            } else {
+                statusFlags[id] = 'canceled';
+            }
+            salvarStatusFlags();
+        };
+
+        window.executarReset = function() {
             const tribunalAlvo = document.getElementById('inputTribunalSelect').value;
             const anoAlvo = document.getElementById('inputAno').value;
             if(!tribunalAlvo || !anoAlvo) return alert("Selecione Tribunal e Ano.");
@@ -579,44 +742,7 @@
                 window.fecharModal();
                 alert(`Leituras resetadas: ${count}`);
             }
-        }
-
-        function salvarDados() {
-            const ano = document.getElementById('inputAno').value; 
-            const tribunalAlvo = document.getElementById('inputTribunalSelect').value;
-            const isSingle = document.getElementById('tabSingle').classList.contains('active'); 
-            
-            let sucesso = false;
-            if(isSingle) { 
-                const num = document.getElementById('inputNumSingle').value; 
-                sucesso = adicionarUnico(tribunalAlvo, ano, num); 
-            } else { 
-                const start = document.getElementById('inputNumStart').value; 
-                const end = document.getElementById('inputNumEnd').value; 
-                sucesso = adicionarFaixa(tribunalAlvo, ano, start, end); 
-            }
-            
-            if(sucesso) { 
-                window.fecharModal(); 
-                document.getElementById('inputNumSingle').value = ''; 
-                document.getElementById('inputNumStart').value = ''; 
-                document.getElementById('inputNumEnd').value = ''; 
-            }
-        }
-
-        document.addEventListener('click', (e) => {
-            const btn = e.target.closest('#btnLogout');
-            if (btn) {
-                e.preventDefault();
-                if(confirm("Deseja realmente sair?")) {
-                    signOut(auth).then(() => {
-                        window.location.href = 'index.html';
-                    }).catch((error) => {
-                        console.error("Erro ao sair:", error);
-                    });
-                }
-            }
-        });
+        };
 
         window.salvarDados = salvarDados;
         window.executarReset = executarReset;
@@ -627,7 +753,6 @@
         
         window.abrirModal = function() {
             document.getElementById('configModal').classList.remove('hidden');
-            // Se estiver em "todos", preenche com o ano corrente no modal, senão o ano selecionado
             document.getElementById('inputAno').value = (anoAtual === 'todos') ? new Date().getFullYear() : anoAtual;
             
             const sel = document.getElementById('inputTribunalSelect');
@@ -684,13 +809,13 @@
         window.excluirItem = function(t, a, n, ev) {
             ev.stopPropagation();
             if(confirm(`Excluir item ${n}?`)) {
-                // Se ano for 'todos' no filtro, 'a' virá preenchido pela função helper
                 if (a === 'todos') return alert("Erro ao identificar o ano do item.");
 
                 databases[currentMode][t][a] = databases[currentMode][t][a].filter(x => x !== n);
-                const id = (currentMode==='informativos') ? `${t}-${n}` : `${currentMode}-${t}-${n}`;
+                const id = getId(n);
                 if(leituras[id]) delete leituras[id];
-                salvarLeituras(); salvarDb();
+                if(statusFlags[id]) delete statusFlags[id];
+                salvarLeituras(); salvarStatusFlags(); salvarDb();
             }
         };
 
@@ -722,6 +847,20 @@
                 else if(n===0) { delete leituras[id]; salvarLeituras(); }
             }
         };
+        
+        document.addEventListener('click', (e) => {
+            const btn = e.target.closest('#btnLogout');
+            if (btn) {
+                e.preventDefault();
+                if(confirm("Deseja realmente sair?")) {
+                    signOut(auth).then(() => {
+                        window.location.href = 'index.html';
+                    }).catch((error) => {
+                        console.error("Erro ao sair:", error);
+                    });
+                }
+            }
+        });
 
     </script>
     
