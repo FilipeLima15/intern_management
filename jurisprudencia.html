@@ -104,12 +104,66 @@
             cursor: pointer; padding: 10px; border-radius: 12px; transition: all 0.2s; border: 1px solid transparent;
             position: relative;
         }
-        .note-file-item:hover { background: #f0f9ff; border-color: #bae6fd; }
+        .note-file-item:hover { background: #f0f9ff; border-color: #bae6fd; z-index: 10; }
         
         .note-file-icon { font-size: 40px; margin-bottom: 8px; transition: color 0.3s; }
         
         .note-file-title { font-size: 11px; font-weight: 600; color: #334155; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
         
+        /* TOOLTIP (Espiadinha) - CSS Avançado com correções de borda */
+        .note-tooltip {
+            visibility: hidden;
+            width: 220px;
+            background-color: #1e293b;
+            color: #fff;
+            text-align: left;
+            border-radius: 8px;
+            padding: 10px;
+            position: absolute;
+            z-index: 50;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            margin-bottom: 10px;
+            opacity: 0;
+            transition: opacity 0.2s, transform 0.2s;
+            font-size: 11px;
+            pointer-events: none;
+            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1);
+            line-height: 1.4;
+            white-space: normal;
+        }
+        .note-tooltip::after {
+            content: "";
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            margin-left: -6px;
+            border-width: 6px;
+            border-style: solid;
+            border-color: #1e293b transparent transparent transparent;
+        }
+        .note-file-item:hover .note-tooltip { visibility: visible; opacity: 1; }
+        .note-tooltip.fix-left { left: -10px; transform: translateX(0); }
+        .note-tooltip.fix-left::after { left: 30px; margin-left: 0; }
+        .note-tooltip.fix-right { left: auto; right: -10px; transform: translateX(0); }
+        .note-tooltip.fix-right::after { left: auto; right: 30px; margin-left: 0; }
+
+        /* PAINEL DE PREVIEW CENTRAL (FLUTUANTE NO MODAL) */
+        #notePreviewPanel {
+            position: absolute;
+            bottom: 20px; left: 50%; transform: translateX(-50%);
+            width: 90%; max-width: 600px;
+            background-color: #1e293b; color: #fff;
+            padding: 15px 20px; border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+            z-index: 60; display: none; opacity: 0; transition: opacity 0.3s;
+            pointer-events: none; text-align: center;
+        }
+        #notePreviewPanel.visible { display: block; opacity: 1; }
+        #notePreviewPanel h5 { color: #7dd3fc; font-weight: 800; font-size: 12px; text-transform: uppercase; margin-bottom: 4px; }
+        #notePreviewPanel p { color: #e2e8f0; font-size: 13px; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+
         .imp-dot { width: 8px; height: 8px; border-radius: 50%; position: absolute; top: 10px; right: 10px; }
         .imp-alta { background-color: #ef4444; box-shadow: 0 0 4px #ef4444; }
         .imp-media { background-color: #f59e0b; }
@@ -232,6 +286,12 @@
         <div class="bg-gray-100/95 backdrop-blur-sm px-6 py-3 border-b border-gray-200/50 shadow-sm shrink-0 z-10 flex flex-wrap items-center justify-between gap-4">
             <div id="courtTabsContainer" class="flex bg-white/60 p-1.5 rounded-2xl gap-1 overflow-x-auto max-w-xl shadow-sm border border-gray-200/60"></div>
             <div class="flex items-center gap-3">
+                
+                <div class="relative group">
+                    <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 group-hover:text-sky-500 transition"></i>
+                    <input type="text" id="dashboardSearch" oninput="window.gerarGrid()" placeholder="Nº ou Etiqueta..." class="pl-9 pr-3 py-1.5 rounded-xl border border-gray-200 text-xs font-bold text-gray-700 w-36 focus:w-48 transition-all outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100 shadow-sm">
+                </div>
+
                 <div class="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl border border-gray-200 shadow-sm">
                     <i class="fa-solid fa-filter text-gray-400 text-xs"></i>
                     <select id="filterStatus" onchange="window.gerarGrid()" class="bg-transparent border-none text-gray-600 text-xs font-bold focus:ring-0 outline-none cursor-pointer">
@@ -303,7 +363,7 @@
     </div>
 
     <div id="noteModal" class="fixed inset-0 bg-black/60 hidden z-50 flex items-center justify-center backdrop-blur-sm transition-all">
-        <div class="bg-white rounded-3xl shadow-2xl w-full max-w-4xl h-[85vh] overflow-hidden flex flex-col border border-white/50">
+        <div class="bg-white rounded-3xl shadow-2xl w-full max-w-4xl h-[85vh] overflow-hidden flex flex-col border border-white/50 relative">
             <div class="bg-gray-50 px-6 pt-4 pb-0 border-b border-gray-200 flex justify-between items-start">
                 <div class="w-full">
                     <div class="flex justify-between items-center mb-4">
@@ -321,19 +381,29 @@
             <div class="flex-1 bg-white overflow-hidden relative">
                 
                 <div id="viewList" class="absolute inset-0 overflow-y-auto p-6">
-                    <div id="filterContainer" class="flex justify-end mb-4 hidden">
+                    <div id="filterContainer" class="flex justify-end items-center gap-2 mb-4 hidden">
+                         <div class="relative">
+                            <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 text-xs"></i>
+                            <input id="internalSearch" type="text" placeholder="Buscar nas notas..." class="bg-white border border-gray-200 text-gray-600 text-xs pl-8 pr-3 py-2 rounded-lg outline-none focus:border-sky-500 shadow-sm w-48 transition" oninput="window.renderNoteList()">
+                         </div>
+                         <div class="w-px h-6 bg-gray-200 mx-1"></div>
                          <select id="filterNoteSubject" onchange="window.renderNoteList()" class="bg-white border border-gray-200 text-gray-600 text-xs font-bold rounded-lg p-2 outline-none focus:border-sky-500 shadow-sm cursor-pointer">
                             <option value="todos">Todas as Matérias</option>
                          </select>
                     </div>
 
-                    <div id="notesContainer" class="space-y-6"></div> 
+                    <div id="notesContainer" class="space-y-6 pb-20"></div> 
 
                     <div id="emptyStateList" class="hidden flex flex-col items-center justify-center h-full text-gray-400">
                         <i class="fa-regular fa-folder-open text-6xl mb-4 opacity-30"></i>
                         <p>Nenhuma anotação criada.</p>
                         <button onclick="window.switchNoteTab('editor')" class="mt-4 text-sky-600 hover:underline">Criar primeira nota</button>
                     </div>
+                </div>
+
+                <div id="notePreviewPanel">
+                    <h5 id="previewTitle">Título da Nota</h5>
+                    <p id="previewContent">Conteúdo do preview...</p>
                 </div>
 
                 <div id="viewEditor" class="absolute inset-0 flex flex-col hidden bg-white">
@@ -467,14 +537,33 @@
                         </div>
 
                         <div class="tool-separator"></div>
+                        <div class="relative">
+                            <button class="nt-btn w-auto px-2 gap-1 text-purple-600" onmousedown="event.preventDefault(); window.toggleColorPopover('templates')" title="Inserir Modelo Rápido">
+                                <i class="fa-solid fa-wand-magic-sparkles"></i>
+                            </button>
+                            <div id="popover-templates" class="color-popover" style="width: 160px; grid-template-columns: 1fr;">
+                                <button class="w-full text-left px-2 py-2 text-xs hover:bg-purple-50 font-bold border-b border-gray-100" onmousedown="event.preventDefault(); window.insertTemplate('thesis')">
+                                    <i class="fa-solid fa-scale-balanced mr-2 text-purple-500"></i> Tese Fixada
+                                </button>
+                                <button class="w-full text-left px-2 py-2 text-xs hover:bg-purple-50 font-bold border-b border-gray-100" onmousedown="event.preventDefault(); window.insertTemplate('acordao')">
+                                    <i class="fa-solid fa-gavel mr-2 text-purple-500"></i> Estrutura Acórdão
+                                </button>
+                                <button class="w-full text-left px-2 py-2 text-xs hover:bg-purple-50 font-bold" onmousedown="event.preventDefault(); window.insertTemplate('resumo')">
+                                    <i class="fa-solid fa-list-check mr-2 text-purple-500"></i> Resumo Aula
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="tool-separator"></div>
                         <button class="nt-btn" onmousedown="event.preventDefault(); document.execCommand('removeFormat')" title="Limpar Formatação"><i class="fa-solid fa-eraser"></i></button>
                     </div>
 
                     <div id="noteContent" class="editor-body" contenteditable="true" placeholder="Conteúdo da anotação..."></div>
                     
                     <div class="p-4 bg-gray-50 border-t border-gray-200 flex justify-between items-center">
-                        <div class="flex gap-2">
+                        <div class="flex gap-2 items-center">
                             <button onclick="window.deleteCurrentNote()" id="btnDeleteNote" class="px-4 py-2 text-red-500 hover:bg-red-50 rounded-lg text-sm font-bold hidden"><i class="fa-solid fa-trash mr-1"></i> Excluir</button>
+                            <span id="lastEditedDisplay" class="text-[10px] text-gray-400 font-bold ml-2"></span>
                         </div>
                         <div class="flex gap-2">
                             <button onclick="window.startNewNote()" class="px-4 py-2 text-sky-600 hover:bg-sky-50 rounded-lg text-sm font-bold border border-sky-200"><i class="fa-solid fa-plus mr-1"></i> Nova Nota</button>
@@ -585,13 +674,29 @@
             } else { rawList = dbRef[tribunalAtual][anoAtual] || []; }
             
             const filterStatus = document.getElementById('filterStatus').value;
+            // NOVO: Filtro de Busca
+            const dashboardSearch = document.getElementById('dashboardSearch');
+            const searchTerm = dashboardSearch ? dashboardSearch.value.toLowerCase().trim() : '';
+
             let filteredList = rawList.filter(num => {
                 const id = getId(num);
                 const nivel = leituras[id] || 0;
                 const isCanceled = statusFlags[id] === 'canceled';
+                
+                // Filtros Padrão
                 if (hideCanceled && isCanceled) return false;
-                if (filterStatus === 'lidos') return nivel > 0;
-                if (filterStatus === 'nao-lidos') return nivel === 0;
+                if (filterStatus === 'lidos' && nivel === 0) return false;
+                if (filterStatus === 'nao-lidos' && nivel > 0) return false;
+
+                // NOVO: Filtro de Busca (Número ou Categoria)
+                if (searchTerm) {
+                    const numStr = String(num).toLowerCase();
+                    const catStr = (categories[id] || '').toLowerCase();
+                    if (!numStr.includes(searchTerm) && !catStr.includes(searchTerm)) {
+                        return false;
+                    }
+                }
+
                 return true;
             });
 
@@ -729,6 +834,7 @@
             const empty = document.getElementById('emptyStateList');
             const filterContainer = document.getElementById('filterContainer');
             const filterSelect = document.getElementById('filterNoteSubject');
+            const searchInput = document.getElementById('internalSearch'); // NOVO
             
             // 1. Popular Filtro
             const subjects = [...new Set(list.map(n => n.subject || 'Sem Matéria'))].sort();
@@ -741,9 +847,21 @@
             });
             if(subjects.includes(currentFilter)) filterSelect.value = currentFilter;
             
-            // 2. Filtrar Lista
+            // 2. Filtrar Lista (Combina Filtro de Matéria + Busca Texto)
             const filterVal = filterSelect.value;
-            const filteredList = (filterVal === 'todos') ? list : list.filter(n => (n.subject || 'Sem Matéria') === filterVal);
+            const searchTerm = searchInput ? searchInput.value.toLowerCase().trim() : '';
+
+            const filteredList = list.filter(n => {
+                // Filtro por Matéria
+                const matchSubject = (filterVal === 'todos') || (n.subject || 'Sem Matéria') === filterVal;
+                
+                // Filtro por Texto (Título ou Conteúdo)
+                const title = (n.title || '').toLowerCase();
+                const content = (n.content || '').toLowerCase().replace(/<[^>]*>?/gm, ''); // Remove tags HTML para busca
+                const matchSearch = !searchTerm || title.includes(searchTerm) || content.includes(searchTerm);
+
+                return matchSubject && matchSearch;
+            });
 
             container.innerHTML = '';
             
@@ -809,10 +927,11 @@
                         return pA - pB;
                     });
 
-                    // Cabeçalho da Matéria
+                    // Cabeçalho da Matéria (COM CONTADOR)
+                    const count = groups[subj].length;
                     const header = document.createElement('h4');
-                    header.className = 'text-sm font-bold text-gray-800 mb-3 border-b border-gray-100 pb-1 mt-2 uppercase tracking-wide';
-                    header.textContent = subj;
+                    header.className = 'text-sm font-bold text-gray-800 mb-3 border-b border-gray-100 pb-1 mt-2 uppercase tracking-wide flex justify-between items-center';
+                    header.innerHTML = `<span>${subj}</span> <span class="text-gray-400 text-[10px] font-normal">${count} notas</span>`;
                     container.appendChild(header);
 
                     // Grid de Cards
@@ -833,9 +952,13 @@
                         else if(note.importance === 'Média') impBadge = '<div class="imp-dot imp-media" title="Média Importância"></div>';
                         else if(note.importance === 'Baixa') impBadge = '<div class="imp-dot imp-baixa" title="Baixa Importância"></div>';
 
-                        // Cor do Ícone baseada na Matéria (CORREÇÃO)
+                        // Cor do Ícone baseada na Matéria
                         const cleanSubject = (note.subject || '').trim().toUpperCase();
                         const iconColor = subjectColors[cleanSubject] || '#f59e0b'; // Amarelo Default
+
+                        // Preview de Texto (Tooltip) - Remove HTML e limita tamanho
+                        const rawText = (note.content || '').replace(/<[^>]*>?/gm, ' ').trim();
+                        const previewText = rawText.length > 200 ? rawText.substring(0, 200) + '...' : (rawText || 'Sem conteúdo');
 
                         el.innerHTML = `
                             ${impBadge}
@@ -843,6 +966,25 @@
                             <div class="note-file-title">${note.title || 'Sem Título'}</div>
                             <div class="text-[9px] text-gray-400 mt-1 uppercase font-bold tracking-wider">${infoText}</div>
                         `;
+
+                        // --- LOGICA DE TOOLTIP CENTRAL ---
+                        const panel = document.getElementById('notePreviewPanel');
+                        const pTitle = document.getElementById('previewTitle');
+                        const pContent = document.getElementById('previewContent');
+
+                        el.onmouseenter = function() {
+                            if(panel && pTitle && pContent) {
+                                pTitle.innerText = (note.title || 'Sem Título').toUpperCase();
+                                pContent.innerText = previewText;
+                                panel.classList.add('visible');
+                            }
+                        };
+                        
+                        el.onmouseleave = function() {
+                            if(panel) panel.classList.remove('visible');
+                        };
+                        // ---------------------------------
+
                         el.onclick = () => window.loadNoteIntoEditor(originalIndex);
                         grid.appendChild(el);
                     });
@@ -865,6 +1007,11 @@
             
             document.getElementById('noteTitleInput').value = note.title || '';
             document.getElementById('noteContent').innerHTML = note.content || '';
+            
+            // Exibir Data de Última Edição
+            const dateStr = note.lastEdited ? new Date(note.lastEdited).toLocaleString('pt-BR') : 'Nunca editado';
+            document.getElementById('lastEditedDisplay').innerText = `Salvo em: ${dateStr}`;
+
             document.getElementById('btnDeleteNote').classList.remove('hidden');
             window.switchNoteTab('editor');
         }
@@ -877,6 +1024,7 @@
             
             document.getElementById('noteTitleInput').value = '';
             document.getElementById('noteContent').innerHTML = '';
+            document.getElementById('lastEditedDisplay').innerText = ''; // Limpa a data
             document.getElementById('btnDeleteNote').classList.add('hidden');
         }
 
@@ -909,6 +1057,43 @@
         window.insertParagraphIndent = function() {
             // Insere 4 espaços não quebráveis para simular indentação
             document.execCommand('insertHTML', false, '&nbsp;&nbsp;&nbsp;&nbsp;');
+        };
+
+        // NOVO: Função para Inserir Modelos (Snippets)
+        window.insertTemplate = function(type) {
+            let html = '';
+            if(type === 'thesis') {
+                html = `
+                    <div style="background-color: #f3e8ff; padding: 10px; border-left: 5px solid #9333ea; margin-bottom: 10px;">
+                        <h4 style="margin: 0 0 5px 0; color: #6b21a8; font-weight: bold;">⚖️ TESE FIXADA:</h4>
+                        <p style="margin: 0; color: #4c1d95; font-style: italic;">"Escreva a tese aqui..."</p>
+                    </div><p><br></p>
+                `;
+            } else if(type === 'acordao') {
+                html = `
+                    <p><b>Relator:</b> Min. Nome do Ministro</p>
+                    <p><b>Órgão Julgador:</b> Turma/Pleno</p>
+                    <p><b>Data do Julgamento:</b> dd/mm/aaaa</p>
+                    <hr>
+                    <p><b>Ementa:</b> ...</p>
+                    <p><br></p>
+                `;
+            } else if(type === 'resumo') {
+                html = `
+                    <h3 style="color: #0284c7;">1. Fatos Relevantes</h3>
+                    <p>...</p>
+                    <h3 style="color: #0284c7;">2. Fundamentação Jurídica</h3>
+                    <p>...</p>
+                    <h3 style="color: #0284c7;">3. Conclusão do Tribunal</h3>
+                    <p>...</p>
+                `;
+            }
+
+            if(html) {
+                document.execCommand('insertHTML', false, html);
+                // Fecha o popover após inserir
+                document.getElementById('popover-templates').classList.remove('show');
+            }
         };
 
         // --- 6. INTEGRAÇÃO FIREBASE ---
@@ -1086,14 +1271,18 @@
 
             let list = getNotesArray(currentCardId);
             
+            // DATA ATUAL (TIMESTAMP)
+            const now = new Date().toISOString();
+
             const newNote = { 
                 id: (editingNoteIndex !== null && list[editingNoteIndex]) ? list[editingNoteIndex].id : Date.now().toString(), 
                 title: title || 'Sem Título', 
                 subject: subject,
-                importance: importance, // Salva importância
+                importance: importance, 
                 orgao: orgao,       
                 content: content, 
-                date: new Date().toISOString() 
+                date: new Date().toISOString(),
+                lastEdited: now // Salva a data de edição
             };
 
             if (editingNoteIndex !== null) list[editingNoteIndex] = newNote; 
@@ -1120,73 +1309,17 @@
         window.categorizeItem = function(id, ev) { ev.stopPropagation(); const c = categories[id] || ''; const i = prompt("Matéria:", c); if(i!==null) { if(i.trim()==='') delete categories[id]; else categories[id]=i.trim(); window.salvarCategories(); } };
         window.toggleCancelItem = function(id, ev) { ev.stopPropagation(); if(statusFlags[id]==='canceled') delete statusFlags[id]; else statusFlags[id]='canceled'; window.salvarStatusFlags(); };
         
-        // FUNÇÃO ATUALIZADA: EXCLUIR TODOS OS ITENS VISÍVEIS (REAL)
         window.excluirTodosVisiveis = async function() {
-            if(!confirm("ATENÇÃO: Você está prestes a excluir TODOS os cards listados na tela agora.\n\nIsso apagará o card, leituras e anotações vinculadas.\n\nTem certeza absoluta?")) return;
-            if(!confirm("Confirmação final: Essa ação NÃO pode ser desfeita.")) return;
-
-            const dbRef = databases[currentMode];
-            if(!dbRef || !dbRef[tribunalAtual]) return alert("Nada para excluir.");
-
-            // 1. Coleta todos os números disponíveis no banco (baseado no ano selecionado)
-            let itemsToDelete = [];
-            if(anoAtual === 'todos') {
-                Object.keys(dbRef[tribunalAtual]).filter(y => y !== '_keep').forEach(ano => {
-                    // Guarda {ano, num} para saber de onde deletar
-                    const listaDoAno = dbRef[tribunalAtual][ano] || [];
-                    listaDoAno.forEach(num => itemsToDelete.push({ano, num}));
-                });
-            } else {
-                const listaDoAno = dbRef[tribunalAtual][anoAtual] || [];
-                listaDoAno.forEach(num => itemsToDelete.push({ano: anoAtual, num}));
-            }
-
-            // 2. Aplica os mesmos filtros visuais da tela (Lidos/Não Lidos/Cancelados)
+            if(!confirm("ATENÇÃO: Excluir TODOS os itens visíveis?")) return;
+            if(!confirm("Confirmação final: Isso não pode ser desfeito.")) return;
+            const dbRef = databases[currentMode]; if(!dbRef || !dbRef[tribunalAtual]) return alert("Nada para excluir.");
+            let itemsToDelete = []; if(anoAtual === 'todos') { Object.keys(dbRef[tribunalAtual]).filter(y => y !== '_keep').forEach(ano => { itemsToDelete = itemsToDelete.concat(dbRef[tribunalAtual][ano] || []); }); } else { itemsToDelete = dbRef[tribunalAtual][anoAtual] || []; }
             const filterStatus = document.getElementById('filterStatus').value;
-            
-            // Filtra a lista de exclusão
-            itemsToDelete = itemsToDelete.filter(item => {
-                const id = getId(item.num);
-                const nivel = leituras[id] || 0;
-                const isCanceled = statusFlags[id] === 'canceled';
-
-                // Se "Ocultar Cancelados" estiver ativo e o item for cancelado, não deleta (pois não está visível)
-                if (hideCanceled && isCanceled) return false;
-
-                // Filtros de leitura
-                if (filterStatus === 'lidos' && nivel === 0) return false;
-                if (filterStatus === 'nao-lidos' && nivel > 0) return false;
-
-                return true;
-            });
-
-            if (itemsToDelete.length === 0) return alert("Nenhum item visível para excluir com os filtros atuais.");
-
-            // 3. Executa a exclusão
-            itemsToDelete.forEach(item => {
-                // Remove do Array do Banco de Dados
-                if(databases[currentMode][tribunalAtual][item.ano]) {
-                    databases[currentMode][tribunalAtual][item.ano] = databases[currentMode][tribunalAtual][item.ano].filter(x => x !== item.num);
-                }
-
-                // Remove dados vinculados
-                const id = getId(item.num);
-                delete leituras[id];
-                delete statusFlags[id];
-                delete urls[id];
-                delete notes[id];
-                delete categories[id];
-            });
-
-            // 4. Salva tudo
-            await window.salvarDb(); 
-            await window.salvarLeituras(); 
-            await window.salvarStatusFlags(); 
-            await window.salvarUrls(); 
-            await window.salvarNotes(); 
-            await window.salvarCategories();
-
-            alert(`${itemsToDelete.length} itens excluídos com sucesso.`);
+            itemsToDelete = itemsToDelete.filter(num => { const id = getId(num); const nivel = leituras[id] || 0; const isCanceled = statusFlags[id] === 'canceled'; if (hideCanceled && isCanceled) return false; if (filterStatus === 'lidos' && nivel === 0) return false; if (filterStatus === 'nao-lidos' && nivel > 0) return false; return true; });
+            if (itemsToDelete.length === 0) return alert("Nenhum item visível para excluir.");
+            itemsToDelete.forEach(num => { if(databases[currentMode][tribunalAtual][anoAtual]) databases[currentMode][tribunalAtual][anoAtual] = databases[currentMode][tribunalAtual][anoAtual].filter(x => x !== num); const id = getId(num); delete leituras[id]; delete statusFlags[id]; delete urls[id]; delete notes[id]; delete categories[id]; });
+            await window.salvarDb(); await window.salvarLeituras(); await window.salvarStatusFlags(); await window.salvarUrls(); await window.salvarNotes(); await window.salvarCategories();
+            alert(`Itens excluídos.`);
         };
 
         window.toggleSort = function() { sortDesc = !sortDesc; gerarGrid(); };
