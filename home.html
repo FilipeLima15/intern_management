@@ -114,7 +114,8 @@
 
         import { db, auth } from "./firebase-config.js";
         import { ref, set, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
-        import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+        // CORREÇÃO: Importando signOut
+        import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
         // Referências DOM
         const examDateInput = document.getElementById('examDateInput');
@@ -138,6 +139,8 @@
             } else {
                 currentUserUID = null;
                 countdownDisplay.innerHTML = '<p class="text-sm text-gray-400">Faça login</p>';
+                // Opcional: Redirecionar para login se não estiver logado
+                window.location.href = 'index.html';
             }
         });
 
@@ -258,6 +261,21 @@
             if (newUrl !== null) {
                 userConfig.concursoURL = newUrl.trim();
                 saveConfig();
+            }
+        });
+
+        // CORREÇÃO: Listener para o botão de LOGOUT funcionar nesta página
+        document.addEventListener('click', (e) => {
+            const btn = e.target.closest('#btnLogout');
+            if (btn) {
+                e.preventDefault();
+                if(confirm("Deseja realmente sair?")) {
+                    signOut(auth).then(() => {
+                        window.location.href = 'index.html';
+                    }).catch((error) => {
+                        console.error("Erro ao sair:", error);
+                    });
+                }
             }
         });
 
