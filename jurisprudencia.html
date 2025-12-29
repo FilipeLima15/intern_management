@@ -220,7 +220,7 @@
     </div>
 
     <script type="module">
-        console.log("🚀 Iniciando Script Jurisprudência (Versão Super/DeleteAll)...");
+        console.log("🚀 Iniciando Script Jurisprudência (Fixed)...");
 
         import { db, auth } from "./firebase-config.js";
         import { ref, set, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
@@ -409,6 +409,29 @@
                 return true;
             } else {
                 alert("Nenhum item novo nesta faixa."); return false;
+            }
+        }
+
+        function salvarDados() {
+            const ano = document.getElementById('inputAno').value; 
+            const tribunalAlvo = document.getElementById('inputTribunalSelect').value;
+            const isSingle = document.getElementById('tabSingle').classList.contains('active'); 
+            
+            let sucesso = false;
+            if(isSingle) { 
+                const num = document.getElementById('inputNumSingle').value; 
+                sucesso = adicionarUnico(tribunalAlvo, ano, num); 
+            } else { 
+                const start = document.getElementById('inputNumStart').value; 
+                const end = document.getElementById('inputNumEnd').value; 
+                sucesso = adicionarFaixa(tribunalAlvo, ano, start, end); 
+            }
+            
+            if(sucesso) { 
+                window.fecharModal(); 
+                document.getElementById('inputNumSingle').value = ''; 
+                document.getElementById('inputNumStart').value = ''; 
+                document.getElementById('inputNumEnd').value = ''; 
             }
         }
 
@@ -723,7 +746,7 @@
             salvarStatusFlags();
         };
 
-        window.executarReset = function() {
+        function executarReset() {
             const tribunalAlvo = document.getElementById('inputTribunalSelect').value;
             const anoAlvo = document.getElementById('inputAno').value;
             if(!tribunalAlvo || !anoAlvo) return alert("Selecione Tribunal e Ano.");
@@ -744,6 +767,65 @@
             }
         };
 
+        window.excluirItem = function(t, a, n, ev) {
+            ev.stopPropagation();
+            if(confirm(`Excluir item ${n}?`)) {
+                if (a === 'todos') return alert("Erro ao identificar o ano do item.");
+
+                databases[currentMode][t][a] = databases[currentMode][t][a].filter(x => x !== n);
+                const id = getId(n);
+                if(leituras[id]) delete leituras[id];
+                if(statusFlags[id]) delete statusFlags[id];
+                salvarLeituras(); salvarStatusFlags(); salvarDb();
+            }
+        };
+
+        window.resetarLeitura = function(id, ev) {
+            ev.stopPropagation();
+            if(confirm("Zerar leitura?")) { delete leituras[id]; salvarLeituras(); }
+        };
+
+        window.excluirTribunal = function(nome, ev) {
+            ev.stopPropagation();
+            if(confirm(`Excluir tribunal ${nome}?`)) {
+                delete databases[currentMode][nome];
+                mudarModo(currentMode); salvarDb();
+            }
+        };
+
+        window.setarNivel = function(id, n) {
+            if(navigator.vibrate) navigator.vibrate(20);
+            leituras[id] = n; salvarLeituras();
+        };
+
+        window.inputNivelPersonalizado = function(id, ev) {
+            ev.stopPropagation();
+            const v = leituras[id] || 0;
+            const inp = prompt("Nível de leitura:", v>3 ? v : "");
+            if(inp!==null) {
+                const n = parseInt(inp);
+                if(!isNaN(n) && n>0) { leituras[id]=n; salvarLeituras(); }
+                else if(n===0) { delete leituras[id]; salvarLeituras(); }
+            }
+        };
+        
+        document.addEventListener('click', (e) => {
+            const btn = e.target.closest('#btnLogout');
+            if (btn) {
+                e.preventDefault();
+                if(confirm("Deseja realmente sair?")) {
+                    signOut(auth).then(() => {
+                        window.location.href = 'index.html';
+                    }).catch((error) => {
+                        console.error("Erro ao sair:", error);
+                    });
+                }
+            }
+        });
+
+        // ========================================================
+        // EXPORTAÇÃO GLOBAL (CRÍTICA PARA FUNCIONAMENTO)
+        // ========================================================
         window.salvarDados = salvarDados;
         window.executarReset = executarReset;
         window.criarTribunal = criarTribunal;
@@ -805,62 +887,6 @@
                 }
             }
         };
-
-        window.excluirItem = function(t, a, n, ev) {
-            ev.stopPropagation();
-            if(confirm(`Excluir item ${n}?`)) {
-                if (a === 'todos') return alert("Erro ao identificar o ano do item.");
-
-                databases[currentMode][t][a] = databases[currentMode][t][a].filter(x => x !== n);
-                const id = getId(n);
-                if(leituras[id]) delete leituras[id];
-                if(statusFlags[id]) delete statusFlags[id];
-                salvarLeituras(); salvarStatusFlags(); salvarDb();
-            }
-        };
-
-        window.resetarLeitura = function(id, ev) {
-            ev.stopPropagation();
-            if(confirm("Zerar leitura?")) { delete leituras[id]; salvarLeituras(); }
-        };
-
-        window.excluirTribunal = function(nome, ev) {
-            ev.stopPropagation();
-            if(confirm(`Excluir tribunal ${nome}?`)) {
-                delete databases[currentMode][nome];
-                mudarModo(currentMode); salvarDb();
-            }
-        };
-
-        window.setarNivel = function(id, n) {
-            if(navigator.vibrate) navigator.vibrate(20);
-            leituras[id] = n; salvarLeituras();
-        };
-
-        window.inputNivelPersonalizado = function(id, ev) {
-            ev.stopPropagation();
-            const v = leituras[id] || 0;
-            const inp = prompt("Nível de leitura:", v>3 ? v : "");
-            if(inp!==null) {
-                const n = parseInt(inp);
-                if(!isNaN(n) && n>0) { leituras[id]=n; salvarLeituras(); }
-                else if(n===0) { delete leituras[id]; salvarLeituras(); }
-            }
-        };
-        
-        document.addEventListener('click', (e) => {
-            const btn = e.target.closest('#btnLogout');
-            if (btn) {
-                e.preventDefault();
-                if(confirm("Deseja realmente sair?")) {
-                    signOut(auth).then(() => {
-                        window.location.href = 'index.html';
-                    }).catch((error) => {
-                        console.error("Erro ao sair:", error);
-                    });
-                }
-            }
-        });
 
     </script>
     
