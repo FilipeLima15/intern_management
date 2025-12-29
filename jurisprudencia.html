@@ -77,7 +77,8 @@
     <div id="sidebar-container"></div>
 
     <main class="flex-1 flex flex-col min-w-0 bg-gray-100 overflow-hidden">
-        <header class="bg-white border-b border-gray-200 shadow-sm shrink-0 z-10">
+        
+        <header class="bg-white border-b border-gray-200 shadow-sm shrink-0 z-20">
             <div class="h-16 px-6 flex justify-between items-center border-b border-gray-100">
                 <div>
                     <h1 class="text-xl font-bold text-gray-800 flex items-center gap-2">
@@ -108,18 +109,34 @@
             </div>
         </header>
 
-        <div class="flex-1 overflow-y-auto p-6 scroll-smooth bg-gray-100">
-            <div class="bg-white/80 p-3 rounded-3xl border border-white/50 shadow-lg shadow-gray-200/50 mb-8 flex flex-wrap items-center justify-between gap-4 sticky top-0 z-10 backdrop-blur-xl">
-                <div id="courtTabsContainer" class="flex bg-gray-100/80 p-1.5 rounded-2xl gap-1 overflow-x-auto max-w-2xl shadow-inner border border-gray-200/50"></div>
-                <div class="flex items-center gap-3 bg-gray-50/80 px-3 py-2 rounded-2xl border border-gray-200/50 shadow-sm">
-                    <label class="text-xs font-bold text-gray-400 uppercase">Ano:</label>
-                    <select id="anoSelect" onchange="mudarAno(this.value)" class="bg-transparent border-none text-gray-700 text-sm focus:ring-0 block p-1 outline-none font-bold cursor-pointer"></select>
-                </div>
-            </div>
+        <div class="bg-gray-100/95 backdrop-blur-sm px-6 py-3 border-b border-gray-200/50 shadow-sm shrink-0 z-10 flex flex-wrap items-center justify-between gap-4">
+            
+            <div id="courtTabsContainer" class="flex bg-white/60 p-1.5 rounded-2xl gap-1 overflow-x-auto max-w-xl shadow-sm border border-gray-200/60"></div>
 
-            <div id="gridContainer" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-8">
+            <div class="flex items-center gap-3">
+                
+                <div class="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl border border-gray-200 shadow-sm">
+                    <i class="fa-solid fa-filter text-gray-400 text-xs"></i>
+                    <select id="filterStatus" onchange="window.gerarGrid()" class="bg-transparent border-none text-gray-600 text-xs font-bold focus:ring-0 outline-none cursor-pointer">
+                        <option value="todos">Todos</option>
+                        <option value="lidos">Lidos</option>
+                        <option value="nao-lidos">Não Lidos</option>
+                    </select>
                 </div>
-            <div class="h-10"></div>
+
+                <div class="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl border border-gray-200 shadow-sm">
+                    <label class="text-[10px] font-bold text-gray-400 uppercase">Ano:</label>
+                    <select id="anoSelect" onchange="mudarAno(this.value)" class="bg-transparent border-none text-gray-700 text-sm focus:ring-0 block outline-none font-bold cursor-pointer w-20"></select>
+                </div>
+
+                <button id="btnSort" onclick="window.toggleSort()" class="w-9 h-9 rounded-xl bg-white text-gray-500 border border-gray-200 shadow-sm hover:text-sky-600 hover:border-sky-200 flex items-center justify-center transition" title="Inverter Ordem">
+                    <i class="fa-solid fa-arrow-down-9-1"></i>
+                </button>
+            </div>
+        </div>
+
+        <div class="flex-1 overflow-y-auto p-6 scroll-smooth bg-gray-100 relative">
+            <div id="gridContainer" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-8 pb-10"></div>
         </div>
     </main>
 
@@ -167,14 +184,12 @@
     </div>
 
     <script type="module">
-        console.log("🚀 Iniciando Script Jurisprudência Completo (Versão Corrigida)...");
+        console.log("🚀 Iniciando Script Jurisprudência (Fix & Filter)...");
 
-        // 1. IMPORTS
         import { db, auth } from "./firebase-config.js";
         import { ref, set, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
         import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
-        // 2. ESTADO GLOBAL
         let databases = {
             'informativos': { 'STF': {}, 'STJ': {} },
             'sumulas': { 'STF - Vinculante': {}, 'STF': {}, 'STJ': {} },
@@ -188,6 +203,7 @@
         let tribunalAtual = 'STF';
         let anoAtual = new Date().getFullYear().toString();
         let currentUserUID = null;
+        let sortDesc = true; // Estado da ordenação
 
         const cardTitles = {
             'informativos': 'INFORMATIVO',
@@ -197,26 +213,17 @@
             'jur-teses': 'JUR. TESES'
         };
 
-        // 3. MONITORAMENTO DE LOGIN
         onAuthStateChanged(auth, (user) => {
             if (user) {
-                console.log("✅ Usuário Identificado:", user.email);
                 currentUserUID = user.uid;
-                
-                // Exibe loader
-                const container = document.getElementById('gridContainer');
-                if(container) container.innerHTML = '<div class="col-span-full text-center py-10"><i class="fa-solid fa-circle-notch fa-spin text-sky-500 text-3xl"></i><p class="mt-2 text-gray-400">Sincronizando dados...</p></div>';
-                
                 carregarDadosFirebase();
             } else {
-                console.warn("⚠️ Nenhum usuário logado.");
                 currentUserUID = null;
                 const container = document.getElementById('gridContainer');
                 if(container) container.innerHTML = '<div class="col-span-full text-center py-10 text-gray-400">Faça login para acessar.</div>';
             }
         });
 
-        // 4. FUNÇÕES FIREBASE
         function getUserRef(path) {
             if(!currentUserUID) return null;
             return ref(db, `users/${currentUserUID}/jurisprudencia/${path}`);
@@ -230,7 +237,6 @@
                     const data = snapshot.val();
                     if(data.databases) databases = data.databases;
                     
-                    // Inicialização de segurança
                     if(!databases['informativos']) databases['informativos'] = { 'STF': {}, 'STJ': {} };
                     if(!databases['sumulas']) databases['sumulas'] = { 'STF - Vinculante': {}, 'STF': {}, 'STJ': {} };
                     
@@ -239,7 +245,6 @@
                 init(); 
             } catch (error) {
                 console.error("Erro no carregamento:", error);
-                alert("Erro ao conectar com o banco de dados.");
             }
         }
 
@@ -247,15 +252,11 @@
             if(!currentUserUID) return alert("Você precisa estar logado.");
             try {
                 await set(getUserRef('databases'), databases);
-                console.log("💾 Estrutura salva.");
-                
-                // Atualiza a tela
                 renderTribunalTabs();
                 carregarAnosNoSelect();
                 gerarGrid();
             } catch (e) {
                 console.error("Erro ao salvar DB:", e);
-                alert("Erro ao salvar dados.");
             }
         }
 
@@ -263,11 +264,10 @@
             if(!currentUserUID) return;
             try {
                 await set(getUserRef('leituras'), leituras);
-                gerarGrid(); // Atualiza cores
+                gerarGrid(); 
             } catch (e) { console.error("Erro ao salvar leituras:", e); }
         }
 
-        // 5. FUNÇÕES LÓGICAS E DE INTERFACE
         function init() {
             mudarModo(currentMode);
         }
@@ -302,7 +302,6 @@
             if(!databases[currentMode]) databases[currentMode] = {};
             if(databases[currentMode][novoNome]) return alert("Tribunal já existe.");
             
-            // CORREÇÃO: Salva um valor dummy para o Firebase não deletar o objeto vazio
             databases[currentMode][novoNome] = { '_keep': 1 };
             salvarDb();
             
@@ -320,7 +319,6 @@
             const n = parseInt(numero);
             if (!dbRef[tribunal][ano].includes(n)) {
                 dbRef[tribunal][ano].push(n);
-                dbRef[tribunal][ano].sort((a, b) => b - a);
                 tribunalAtual = tribunal; anoAtual = ano;
                 salvarDb();
                 return true;
@@ -346,7 +344,6 @@
                 }
             }
             if(count > 0) {
-                dbRef[tribunal][ano].sort((a, b) => b - a);
                 tribunalAtual = tribunal; anoAtual = ano;
                 salvarDb();
                 alert(`${count} itens adicionados.`);
@@ -360,8 +357,6 @@
             if (currentMode === 'informativos') return `${tribunalAtual}-${num}`;
             return `${currentMode}-${tribunalAtual}-${num}`;
         }
-
-        // --- RENDERIZAÇÃO ---
 
         function renderTribunalTabs() {
             const container = document.getElementById('courtTabsContainer');
@@ -384,10 +379,9 @@
                 const active = nome === tribunalAtual;
                 
                 btn.className = active 
-                    ? "px-4 py-2 rounded-xl text-sm font-bold shadow-sm bg-white text-sky-700 border border-gray-200/50 flex items-center" 
-                    : "px-4 py-2 rounded-xl text-sm font-medium text-gray-500 hover:text-gray-700 hover:bg-white/60 border border-transparent flex items-center";
+                    ? "px-4 py-2 rounded-xl text-sm font-bold shadow-sm bg-white text-sky-700 border border-gray-200/50 flex items-center shrink-0" 
+                    : "px-4 py-2 rounded-xl text-sm font-medium text-gray-500 hover:text-gray-700 hover:bg-white/60 border border-transparent flex items-center shrink-0";
                 
-                // Importante: usamos window.mudarTribunal aqui
                 btn.onclick = () => window.mudarTribunal(nome);
                 btn.innerHTML = `<span>${nome}</span>`;
                 
@@ -407,59 +401,99 @@
             if(!select) return;
             const dbRef = databases[currentMode];
             
-            if(!dbRef || !dbRef[tribunalAtual]) {
-                select.innerHTML = '<option value="">-</option>'; return;
-            }
+            select.innerHTML = '';
+            // Opção TODOS
+            const optTodos = document.createElement('option');
+            optTodos.value = "todos";
+            optTodos.text = "Todos";
+            select.appendChild(optTodos);
             
-            // CORREÇÃO: Filtra a chave dummy '_keep' para não aparecer na lista
+            if(!dbRef || !dbRef[tribunalAtual]) return;
+
             const anos = Object.keys(dbRef[tribunalAtual])
                 .filter(year => year !== '_keep') 
                 .sort((a,b)=>b-a);
-                
-            select.innerHTML = '';
-            
-            if(anos.length === 0) {
-                const o = document.createElement('option'); o.value = anoAtual; o.text = anoAtual; select.appendChild(o);
-            } else {
+
+            if(anos.length > 0) {
                 anos.forEach(ano => {
                     const o = document.createElement('option'); o.value = ano; o.text = ano;
                     if(ano == anoAtual) o.selected = true;
                     select.appendChild(o);
                 });
+            } else {
+                // Se não tiver anos, seleciona 'todos' ou o ano atual padrão
+                if(anoAtual !== 'todos') {
+                   const o = document.createElement('option'); o.value = anoAtual; o.text = anoAtual;
+                   o.selected = true; select.appendChild(o);
+                }
             }
-            // Sincroniza
             if(select.value) anoAtual = select.value;
         }
 
         function mudarTribunal(t) { tribunalAtual = t; renderTribunalTabs(); carregarAnosNoSelect(); gerarGrid(); }
         function mudarAno(a) { anoAtual = a; gerarGrid(); }
+        
+        window.toggleSort = function() {
+            sortDesc = !sortDesc;
+            const btn = document.getElementById('btnSort');
+            if(btn) btn.innerHTML = sortDesc ? '<i class="fa-solid fa-arrow-down-9-1"></i>' : '<i class="fa-solid fa-arrow-up-1-9"></i>';
+            gerarGrid();
+        }
 
-        function gerarGrid() {
+        window.gerarGrid = function() {
             const container = document.getElementById('gridContainer');
             if(!container) return;
             container.innerHTML = '';
             
             const dbRef = databases[currentMode];
-            if(!dbRef) return;
-            if(!dbRef[tribunalAtual]) dbRef[tribunalAtual] = {};
+            if(!dbRef || !dbRef[tribunalAtual]) return;
+
+            // 1. Coleta os Itens (Considerando Ano "Todos" ou Específico)
+            let rawList = [];
             
-            const lista = dbRef[tribunalAtual][anoAtual] || [];
+            if(anoAtual === 'todos') {
+                // Pega de todos os anos disponíveis
+                const anos = Object.keys(dbRef[tribunalAtual]).filter(y => y !== '_keep');
+                anos.forEach(ano => {
+                    const itensAno = dbRef[tribunalAtual][ano] || [];
+                    rawList = rawList.concat(itensAno);
+                });
+                // Remove duplicatas se houver (mesmo número em anos diferentes é raro, mas seguro previnir)
+                rawList = [...new Set(rawList)];
+            } else {
+                rawList = dbRef[tribunalAtual][anoAtual] || [];
+            }
+            
+            // 2. Filtros de Status
+            const filterStatus = document.getElementById('filterStatus').value; // todos, lidos, nao-lidos
+            let filteredList = rawList.filter(num => {
+                const id = getId(num);
+                const nivel = leituras[id] || 0;
+                if(filterStatus === 'lidos') return nivel > 0;
+                if(filterStatus === 'nao-lidos') return nivel === 0;
+                return true;
+            });
+
+            // 3. Ordenação
+            filteredList.sort((a, b) => sortDesc ? b - a : a - b);
             
             const lp = document.getElementById('labelProgress');
             if(lp) lp.innerText = `Progresso (${cardTitles[currentMode]})`;
-            const mt = document.getElementById('modalTitle');
-            if(mt) mt.innerText = `Gerenciar ${cardTitles[currentMode]}`;
 
-            if(lista.length === 0) {
-                container.innerHTML = `<div class="col-span-full flex flex-col items-center justify-center py-20 text-gray-400 bg-white/80 rounded-[2rem] border-2 border-dashed border-gray-300/50 shadow-sm backdrop-blur-sm"><div class="bg-gray-50 p-5 rounded-full mb-4 shadow-inner"><i class="fa-solid fa-folder-plus text-5xl text-gray-300/80"></i></div><p class="font-medium text-lg text-gray-500">Nenhum item aqui.</p><button onclick="window.abrirModal()" class="mt-4 px-8 py-3 bg-gradient-to-r from-sky-500 to-sky-600 text-white rounded-full hover:from-sky-600 hover:to-sky-700 font-bold transition shadow-lg shadow-sky-200/50 text-sm transform hover:-translate-y-0.5">Adicionar agora</button></div>`;
+            if(filteredList.length === 0) {
+                container.innerHTML = `<div class="col-span-full flex flex-col items-center justify-center py-20 text-gray-400"><div class="bg-white p-5 rounded-full mb-4 shadow-sm border border-gray-100"><i class="fa-solid fa-folder-open text-4xl text-gray-300"></i></div><p class="font-medium text-lg text-gray-500">Nenhum item encontrado.</p></div>`;
                 atualizarProgresso(0,0); return;
             }
 
-            let lidos = 0;
-            lista.forEach(num => {
+            let totalLidosGeral = 0;
+            // Para calcular o progresso, usamos a lista bruta ou filtrada? 
+            // Geralmente progresso é sobre o que está na tela ou sobre o ano selecionado.
+            // Vamos calcular sobre o que está na tela (filtrado) para dar feedback dinâmico.
+            
+            filteredList.forEach(num => {
                 const id = getId(num);
                 const nivel = leituras[id] || 0;
-                if(nivel > 0) lidos++;
+                if(nivel > 0) totalLidosGeral++;
                 
                 let txtColor = 'text-rev-0';
                 if(nivel===1) txtColor='text-rev-1';
@@ -470,9 +504,8 @@
                 const card = document.createElement('div');
                 card.className = "info-card rounded-[2rem] flex flex-col items-center justify-between relative group h-[190px]";
                 
-                // Usando window.excluirItem etc.
                 card.innerHTML = `
-                    <button class="card-action-btn btn-delete-card" onclick="window.excluirItem('${tribunalAtual}','${anoAtual}',${num},event)"><i class="fa-solid fa-trash-can"></i></button>
+                    <button class="card-action-btn btn-delete-card" onclick="window.excluirItem('${tribunalAtual}','${anoAtual === 'todos' ? encontrarAnoDoItem(num) : anoAtual}',${num},event)"><i class="fa-solid fa-trash-can"></i></button>
                     <button class="card-action-btn btn-reset-card" onclick="window.resetarLeitura('${id}',event)"><i class="fa-solid fa-rotate-left"></i></button>
                     <div class="card-header-bar w-full text-[10px] uppercase tracking-widest text-gray-400 font-bold py-2.5">${cardTitles[currentMode]}</div>
                     <div class="text-center flex-1 flex flex-col justify-center pb-2">
@@ -502,7 +535,17 @@
                 card.appendChild(revDiv);
                 container.appendChild(card);
             });
-            atualizarProgresso(lidos, lista.length);
+            atualizarProgresso(totalLidosGeral, filteredList.length);
+        }
+
+        // Helper para achar o ano quando estamos no modo "Todos"
+        function encontrarAnoDoItem(num) {
+            const dbRef = databases[currentMode][tribunalAtual];
+            for(let ano in dbRef) {
+                if(ano === '_keep') continue;
+                if(dbRef[ano].includes(num)) return ano;
+            }
+            return anoAtual; // fallback
         }
 
         function atualizarProgresso(lidos, total) {
@@ -561,11 +604,6 @@
             }
         }
 
-        // ========================================================
-        // 6. EXPORTAR FUNÇÕES PARA O WINDOW (SOLUÇÃO DOS ERROS)
-        // ========================================================
-        
-        // CORREÇÃO: Listener para o botão de LOGOUT funcionar nesta página
         document.addEventListener('click', (e) => {
             const btn = e.target.closest('#btnLogout');
             if (btn) {
@@ -580,8 +618,6 @@
             }
         });
 
-        // Atribuir explicitamente ao objeto window faz com que o HTML
-        // consiga ver estas funções, mesmo estando dentro do module.
         window.salvarDados = salvarDados;
         window.executarReset = executarReset;
         window.criarTribunal = criarTribunal;
@@ -591,7 +627,8 @@
         
         window.abrirModal = function() {
             document.getElementById('configModal').classList.remove('hidden');
-            document.getElementById('inputAno').value = anoAtual;
+            // Se estiver em "todos", preenche com o ano corrente no modal, senão o ano selecionado
+            document.getElementById('inputAno').value = (anoAtual === 'todos') ? new Date().getFullYear() : anoAtual;
             
             const sel = document.getElementById('inputTribunalSelect');
             sel.innerHTML = '';
@@ -647,6 +684,9 @@
         window.excluirItem = function(t, a, n, ev) {
             ev.stopPropagation();
             if(confirm(`Excluir item ${n}?`)) {
+                // Se ano for 'todos' no filtro, 'a' virá preenchido pela função helper
+                if (a === 'todos') return alert("Erro ao identificar o ano do item.");
+
                 databases[currentMode][t][a] = databases[currentMode][t][a].filter(x => x !== n);
                 const id = (currentMode==='informativos') ? `${t}-${n}` : `${currentMode}-${t}-${n}`;
                 if(leituras[id]) delete leituras[id];
