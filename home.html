@@ -114,8 +114,29 @@
 
         import { db, auth } from "./firebase-config.js";
         import { ref, set, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
-        // CORREÇÃO: Importando signOut
         import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+
+        // --- CORREÇÃO: LOGOUT PRIORITÁRIO ---
+        // Movido para o topo para garantir funcionamento imediato
+        document.addEventListener('click', (e) => {
+            // Procura o botão de logout (mesmo que clicado no ícone dentro dele)
+            const btn = e.target.closest('#btnLogout');
+            
+            if (btn) {
+                e.preventDefault();
+                e.stopPropagation(); // Garante que nada bloqueie o clique
+                
+                if(confirm("Deseja realmente sair?")) {
+                    console.log("Saindo do sistema...");
+                    signOut(auth).then(() => {
+                        window.location.href = 'index.html';
+                    }).catch((error) => {
+                        console.error("Erro ao sair:", error);
+                        alert("Erro ao sair. Tente recarregar a página.");
+                    });
+                }
+            }
+        });
 
         // Referências DOM
         const examDateInput = document.getElementById('examDateInput');
@@ -264,22 +285,7 @@
             }
         });
 
-        // CORREÇÃO: Listener para o botão de LOGOUT funcionar nesta página
-        document.addEventListener('click', (e) => {
-            const btn = e.target.closest('#btnLogout');
-            if (btn) {
-                e.preventDefault();
-                if(confirm("Deseja realmente sair?")) {
-                    signOut(auth).then(() => {
-                        window.location.href = 'index.html';
-                    }).catch((error) => {
-                        console.error("Erro ao sair:", error);
-                    });
-                }
-            }
-        });
-
-        // Lógica de Frases (Mantida)
+        // Lógica de Frases
         const frases = [
             "A persistência é o caminho do êxito.", "Cada página lida é um passo rumo à aprovação.",
             "Disciplina é o que transforma sonhos em conquistas.", "Você é capaz de muito mais do que imagina.",
