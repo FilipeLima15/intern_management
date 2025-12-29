@@ -167,12 +167,12 @@
     </div>
 
     <script type="module">
-        console.log("🚀 Iniciando Script Jurisprudência Completo...");
+        console.log("🚀 Iniciando Script Jurisprudência Completo (Versão Corrigida)...");
 
         // 1. IMPORTS
         import { db, auth } from "./firebase-config.js";
         import { ref, set, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
-        import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+        import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
         // 2. ESTADO GLOBAL
         let databases = {
@@ -302,7 +302,8 @@
             if(!databases[currentMode]) databases[currentMode] = {};
             if(databases[currentMode][novoNome]) return alert("Tribunal já existe.");
             
-            databases[currentMode][novoNome] = {};
+            // CORREÇÃO: Salva um valor dummy para o Firebase não deletar o objeto vazio
+            databases[currentMode][novoNome] = { '_keep': 1 };
             salvarDb();
             
             tribunalAtual = novoNome;
@@ -410,7 +411,11 @@
                 select.innerHTML = '<option value="">-</option>'; return;
             }
             
-            const anos = Object.keys(dbRef[tribunalAtual]).sort((a,b)=>b-a);
+            // CORREÇÃO: Filtra a chave dummy '_keep' para não aparecer na lista
+            const anos = Object.keys(dbRef[tribunalAtual])
+                .filter(year => year !== '_keep') 
+                .sort((a,b)=>b-a);
+                
             select.innerHTML = '';
             
             if(anos.length === 0) {
@@ -560,6 +565,21 @@
         // 6. EXPORTAR FUNÇÕES PARA O WINDOW (SOLUÇÃO DOS ERROS)
         // ========================================================
         
+        // CORREÇÃO: Listener para o botão de LOGOUT funcionar nesta página
+        document.addEventListener('click', (e) => {
+            const btn = e.target.closest('#btnLogout');
+            if (btn) {
+                e.preventDefault();
+                if(confirm("Deseja realmente sair?")) {
+                    signOut(auth).then(() => {
+                        window.location.href = 'index.html';
+                    }).catch((error) => {
+                        console.error("Erro ao sair:", error);
+                    });
+                }
+            }
+        });
+
         // Atribuir explicitamente ao objeto window faz com que o HTML
         // consiga ver estas funções, mesmo estando dentro do module.
         window.salvarDados = salvarDados;
