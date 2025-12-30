@@ -702,3 +702,40 @@ input[type="color"]::-webkit-color-swatch {
 .footer-links .separator {
     color: #cbd5e1; /* Slate 300 */
 }
+
+/* ============================================================
+   DRAG & DROP (ANKI)
+   ============================================================ */
+
+/* O item que está sendo arrastado fica meio transparente */
+.drag-source {
+    opacity: 0.4;
+    border: 2px dashed #94a3b8 !important;
+    background-color: #f1f5f9;
+}
+
+/* O alvo (pasta) que vai receber o item ganha destaque */
+.drag-target {
+    border: 2px solid #0284c7 !important;
+    background-color: #e0f2fe !important;
+    transform: scale(1.02);
+    box-shadow: 0 10px 15px -3px rgba(2, 132, 199, 0.2);
+    z-index: 10;
+}
+
+/* O ícone de "pegar" (Handle) */
+.drag-handle {
+    cursor: grab;
+    color: #cbd5e1; /* Cinza claro */
+    transition: color 0.2s;
+    padding: 4px;
+}
+
+.drag-handle:hover {
+    color: #64748b; /* Cinza escuro ao passar o mouse */
+}
+
+.drag-handle:active {
+    cursor: grabbing;
+    color: #0284c7;
+}
