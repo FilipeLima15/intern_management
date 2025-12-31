@@ -12,9 +12,9 @@
         .flashcard-container {
             width: 100%; background: white; border-radius: 1.5rem;
             box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1); border: 1px solid #e2e8f0;
-            overflow: hidden; display: flex; flex-direction: column; min-height: 450px; /* Aumentei um pouco */
+            overflow: hidden; display: flex; flex-direction: column; min-height: 450px;
         }
-        .flashcard-section { padding: 2.5rem; position: relative; } /* Mais espaçamento interno */
+        .flashcard-section { padding: 2.5rem; position: relative; }
         .flashcard-front { background: #ffffff; color: #1e293b; flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; }
         .flashcard-back { background: #f0f9ff; color: #0f172a; border-top: 2px dashed #bae6fd; display: none; flex: 1; flex-direction: column; justify-content: center; align-items: center; }
         .flashcard-container.revealed .flashcard-back { display: flex; animation: fadeIn 0.5s ease; }
@@ -91,7 +91,7 @@
         .tree-icon.deck { color: #64748b; font-size: 14px; }
         .tree-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-        /* --- NOVOS ESTILOS DO TEMPORIZADOR (Compacto) --- */
+        /* --- NOVOS ESTILOS DO TEMPORIZADOR --- */
         .timer-widget {
             display: flex; align-items: center; gap: 8px;
             background: #ffffff; border: 1px solid #e2e8f0;
@@ -99,7 +99,7 @@
             font-family: monospace; font-weight: 700; color: #475569;
             box-shadow: 0 2px 5px rgba(0,0,0,0.05);
             transition: all 0.2s;
-            height: 40px; /* Altura fixa para alinhar com botões */
+            height: 40px; 
         }
         .timer-widget.active { border-color: #38bdf8; color: #0284c7; background: #f0f9ff; }
         .timer-widget.paused { border-color: #fbbf24; color: #d97706; background: #fffbeb; }
@@ -124,12 +124,17 @@
         .timer-option-btn.selected { border-color: #0284c7; background: #f0f9ff; color: #0284c7; box-shadow: 0 0 0 2px #bae6fd; }
         .timer-icon { font-size: 2rem; margin-bottom: 0.5rem; }
 
-        /* Rotação do Chevron */
         .chevron-icon { transition: transform 0.3s; }
         .rotated { transform: rotate(180deg); }
-        /* Ocultação suave */
         .section-content { transition: all 0.3s ease-out; overflow: hidden; max-height: 2000px; opacity: 1; }
         .section-content.collapsed { max-height: 0; opacity: 0; padding: 0 !important; margin: 0 !important; }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
+        }
+        .shake-animation { animation: shake 0.3s ease-in-out; }
     </style>
 </head>
 <body class="bg-gray-100 text-gray-800 h-screen flex overflow-hidden font-sans">
@@ -178,9 +183,15 @@
             <div class="flex flex-wrap items-center justify-between mb-6 gap-3">
                 <div id="deckBreadcrumbs" class="hidden flex items-center gap-2 text-sm font-medium text-gray-500 bg-white px-4 py-2 rounded-lg shadow-sm border border-gray-100"></div>
                 
-                <div class="relative group ml-auto">
-                    <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 group-hover:text-sky-500 transition"></i>
-                    <input type="text" id="deckSearchInput" oninput="window.filterDecks(this.value)" placeholder="Filtrar..." class="pl-9 pr-3 py-2 rounded-lg border border-gray-200 text-sm font-bold text-gray-700 w-48 focus:w-64 transition-all outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100 shadow-sm bg-white">
+                <div class="flex items-center gap-2 ml-auto">
+                    <button id="btnFilterShared" onclick="window.toggleSharedFilter()" class="h-10 w-10 rounded-lg bg-white border border-gray-200 text-gray-400 hover:text-indigo-500 hover:border-indigo-200 shadow-sm transition flex items-center justify-center group relative" title="Filtrar Apenas Compartilhados">
+                        <i class="fa-solid fa-share-nodes"></i>
+                    </button>
+
+                    <div class="relative group">
+                        <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 group-hover:text-sky-500 transition"></i>
+                        <input type="text" id="deckSearchInput" oninput="window.filterDecks(this.value)" placeholder="Filtrar..." class="pl-9 pr-3 py-2 rounded-lg border border-gray-200 text-sm font-bold text-gray-700 w-48 focus:w-64 transition-all outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100 shadow-sm bg-white">
+                    </div>
                 </div>
             </div>
 
@@ -248,7 +259,7 @@
                         </div>
                     </div>
 
-                    <button onclick="window.skipCard()" class="bg-white border border-gray-300 text-gray-600 hover:text-amber-600 hover:border-amber-300 hover:bg-amber-50 px-5 py-2 rounded-lg shadow-sm text-sm font-bold flex items-center gap-2 transition transform active:scale-95 z-20">
+                    <button id="btnSkipCard" onclick="window.skipCard()" class="bg-white border border-gray-300 text-gray-600 hover:text-amber-600 hover:border-amber-300 hover:bg-amber-50 px-5 py-2 rounded-lg shadow-sm text-sm font-bold flex items-center gap-2 transition transform active:scale-95 z-20">
                         Pular <i class="fa-solid fa-chevron-right"></i>
                     </button>
                 </div>
@@ -290,13 +301,27 @@
                                 <div id="cardTypeBadge" class="absolute top-0 right-0 bg-gray-100 text-gray-500 text-[10px] font-bold px-3 py-1 rounded-bl-xl uppercase tracking-wider">Geral</div>
                                 <span id="lblFrontDisplay" class="absolute top-6 left-6 text-[10px] font-bold text-gray-300 uppercase tracking-[0.2em]">Pergunta</span>
                                 <div id="cardFrontText" class="text-2xl text-center leading-relaxed w-full px-8 mt-4 card-html-content font-medium text-gray-700"></div>
+                                
+                                <div id="objectiveStudyActions" class="hidden mt-6 w-full flex justify-center gap-3 z-20">
+    <button onclick="window.checkObjectiveAnswer('certo', event)" class="bg-green-100 hover:bg-green-200 text-green-700 border border-green-200 px-4 py-2 rounded-lg font-bold text-sm shadow-sm transition w-24">
+        CERTO
+    </button>
+    <button onclick="window.checkObjectiveAnswer('errado', event)" class="bg-red-100 hover:bg-red-200 text-red-700 border border-red-200 px-4 py-2 rounded-lg font-bold text-sm shadow-sm transition w-24">
+        ERRADO
+    </button>
+</div>
+
                                 <div id="tapToRevealHint" class="text-xs text-gray-300 text-center mt-12 animate-pulse absolute bottom-6 w-full left-0">
                                     <i class="fa-regular fa-hand-pointer mr-1"></i> Toque para revelar
                                 </div>
                             </div>
                             <div class="flashcard-section flashcard-back relative">
                                 <span id="lblBackDisplay" class="absolute top-6 left-6 text-[10px] font-bold text-sky-200 uppercase tracking-[0.2em]">Resposta</span>
-                                <div id="cardBackText" class="text-lg text-center leading-relaxed w-full px-8 mt-4 mb-4 card-html-content text-gray-800"></div>
+                                
+                                <div id="objectiveFeedbackDisplay" class="hidden w-full text-center mb-4 px-4"></div>
+
+                                <div id="cardBackText" class="text-lg text-center leading-relaxed w-full px-8 mt-2 mb-4 card-html-content text-gray-800"></div>
+                                
                                 <div id="cardFooterInfo" class="bg-sky-50 p-3 rounded-lg border border-sky-100 flex flex-col gap-1 text-center hidden mt-6 mx-8">
                                     <div id="cardLegalBasis" class="text-xs text-sky-800 font-bold italic"></div>
                                     <a id="cardExternalLink" href="#" target="_blank" class="text-[10px] font-bold text-sky-600 hover:underline flex items-center justify-center gap-1"><i class="fa-solid fa-external-link-alt"></i> Acessar Fonte</a>
@@ -320,13 +345,10 @@
 
     <div id="timerConfigModal" class="fixed inset-0 bg-black/60 hidden z-[70] flex items-center justify-center backdrop-blur-sm">
         <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 animate-fade-in relative">
-            
             <button onclick="document.getElementById('timerConfigModal').classList.add('hidden')" class="absolute top-4 right-4 text-gray-400 hover:text-red-500 transition w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100" title="Cancelar">
                 <i class="fa-solid fa-xmark text-lg"></i>
             </button>
-
             <h3 class="text-xl font-bold text-gray-800 text-center mb-6">Modo de Tempo</h3>
-            
             <div class="grid grid-cols-3 gap-4 mb-6">
                 <div class="timer-option-btn" onclick="window.selectTimerMode('stopwatch', this)">
                     <i class="fa-solid fa-stopwatch timer-icon"></i>
@@ -341,7 +363,6 @@
                     <span class="font-bold text-sm">Sem Tempo</span>
                 </div>
             </div>
-
             <div id="timerInputContainer" class="hidden mb-6 bg-gray-50 p-4 rounded-xl border border-gray-200 text-center">
                 <label class="block text-xs font-bold text-gray-500 uppercase mb-2">Tempo (Minutos)</label>
                 <div class="flex items-center justify-center gap-3">
@@ -350,7 +371,6 @@
                     <button onclick="window.adjustTime(5)" class="w-8 h-8 rounded-full bg-white border shadow-sm text-gray-500 hover:bg-green-50 hover:text-green-500 font-bold">+5</button>
                 </div>
             </div>
-
             <button onclick="window.confirmTimerStart()" class="w-full bg-sky-600 hover:bg-sky-700 text-white font-bold py-3.5 rounded-xl shadow-lg transition transform hover:-translate-y-0.5">
                 Iniciar Estudos
             </button>
@@ -472,12 +492,14 @@
                     </div>
                 </div>
                 <div>
-                    <label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">Formato do Card</label>
+                    <label class="block text-xs font-bold text-gray-500 uppercase mb-1 pl-1">Formato</label>
                     <select id="inputCardFormat" onchange="window.toggleFormatUI()" class="w-full border border-gray-200 rounded-lg p-2.5 text-sm font-bold text-gray-700 focus:border-sky-400 outline-none">
                         <option value="basic">Tradicional (Frente/Verso)</option>
                         <option value="cloze">Oclusão (Cloze)</option>
+                        <option value="objective">Julgamento (Certo / Errado)</option>
                     </select>
                 </div>
+
                 <div>
                     <label id="lblFrontEditor" class="block text-[10px] font-bold text-gray-400 uppercase mb-1 ml-1">Frente (Pergunta)</label>
                     <div class="editor-toolbar" id="toolbarFront">
@@ -492,6 +514,21 @@
                     </div>
                     <div id="inputFront" class="editor-content" contenteditable="true" placeholder="Digite aqui..."></div>
                 </div>
+
+                <div id="objectiveConfigContainer" class="hidden mt-4 mb-4 bg-gray-50 p-3 rounded-lg border border-gray-200">
+                    <label class="block text-[10px] font-bold text-gray-400 uppercase mb-2">Gabarito (Resposta Correta)</label>
+                    <div class="flex gap-6">
+                        <label class="flex items-center gap-2 cursor-pointer p-2 hover:bg-white rounded transition">
+                            <input type="radio" name="inputObjectiveAnswer" value="certo" class="accent-green-600 w-4 h-4">
+                            <span class="text-sm font-bold text-green-700">CERTO</span>
+                        </label>
+                        <label class="flex items-center gap-2 cursor-pointer p-2 hover:bg-white rounded transition">
+                            <input type="radio" name="inputObjectiveAnswer" value="errado" class="accent-red-600 w-4 h-4">
+                            <span class="text-sm font-bold text-red-700">ERRADO</span>
+                        </label>
+                    </div>
+                </div>
+
                 <div>
                     <label id="lblBackEditor" class="block text-[10px] font-bold text-gray-400 uppercase mb-1 ml-1">Verso (Resposta)</label>
                     <div class="editor-toolbar" id="toolbarBack">
@@ -502,6 +539,7 @@
                     </div>
                     <div id="inputBack" class="editor-content bg-sky-50/30" contenteditable="true" placeholder="Resposta..."></div>
                 </div>
+
                 <div class="grid grid-cols-2 gap-4 pt-2 border-t border-gray-100">
                     <div>
                         <label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">Fundamentação Legal</label>

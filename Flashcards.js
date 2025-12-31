@@ -12,6 +12,8 @@ let currentDeckName = null;
 let currentCategoryFilter = 'conteudo';
 let currentPathStack = []; 
 
+
+
 // Variáveis de Estado
 let draggedItemPath = null;
 let selectedTargetFolder = null;
@@ -19,10 +21,32 @@ let selectedCreateFolder = "";
 let isEditingFromManager = false; // Controle de navegação (Gerenciador -> Editor)
 let currentDeckFilter = ""; // Variável para o filtro de busca
 
+// --- NOVO: LÓGICA DO FILTRO DE COMPARTILHADOS ---
+let filterOnlyShared = false;
+
+window.toggleSharedFilter = function() {
+    filterOnlyShared = !filterOnlyShared;
+    const btn = document.getElementById('btnFilterShared');
+    
+    // Atualiza Visual do Botão
+    if (btn) {
+        if (filterOnlyShared) {
+            btn.classList.remove('bg-white', 'text-gray-400', 'border-gray-200');
+            btn.classList.add('bg-indigo-50', 'text-indigo-600', 'border-indigo-300', 'ring-2', 'ring-indigo-100');
+        } else {
+            btn.classList.add('bg-white', 'text-gray-400', 'border-gray-200');
+            btn.classList.remove('bg-indigo-50', 'text-indigo-600', 'border-indigo-300', 'ring-2', 'ring-indigo-100');
+        }
+    }
+    renderDecksView(); // Recarrega a tela com o novo filtro
+};
+
+let sharedSessionOwner = null; // <--- ADICIONE ESTA LINHA AQUI
 // ... (após let currentDeckFilter = "";)
 
 // --- VARIÁVEIS COMPARTILHAMENTO ---
 let sharedDecksCache = []; // Armazena os baralhos que compartilharam comigo
+let mySharedDecksMap = {}; // <--- NOVO: Armazena o que EU compartilhei
 
 // --- HELPERS PARA COMPARTILHAMENTO ---
 // O Firebase não aceita '.', '#', '$', '[', ']' em chaves.
@@ -37,6 +61,7 @@ let studyTimerMode = 'none'; // 'stopwatch', 'timer', 'none'
 let studyTimerPaused = false;
 let pendingDeckName = null; // Guarda o baralho enquanto configura o tempo
 let pendingIsCramming = false;
+let pendingSharedData = null; // <--- ADICIONE ESTA LINHA (Dados temporários para o timer compartilhado)
 
 // --- INJEÇÃO DE CSS (Remove Scrollbar e Ajusta Layout) ---
 const style = document.createElement('style');
@@ -178,8 +203,15 @@ async function loadAnkiData() {
     try {
         const cardsSnap = await get(ref(db, `users/${currentUserUID}/anki/cards`));
         allCards = cardsSnap.exists() ? cardsSnap.val() : {};
+        
         const settingsSnap = await get(ref(db, `users/${currentUserUID}/anki/settings`));
         deckSettings = settingsSnap.exists() ? settingsSnap.val() : {};
+
+        // <--- NOVO: Carrega lista de compartilhamentos enviados
+        const sharedOutSnap = await get(ref(db, `users/${currentUserUID}/anki/shared_out`));
+        mySharedDecksMap = sharedOutSnap.exists() ? sharedOutSnap.val() : {};
+        // --->
+
         renderDecksView();
         populateDeckSuggestions();
     } catch (e) { console.error(e); }
@@ -208,74 +240,110 @@ window.switchMainTab = function(category) {
 };
 
 window.showDecksView = function() {
-    // GARANTIA: Parar qualquer timer ativo ao sair
+    // 1. GARANTIA: Parar qualquer timer ativo ao sair
     window.stopTimer(true);
+    
+    // 2. Resetar variável de sessão compartilhada
+    sharedSessionOwner = null; 
 
-    const viewStudy = document.getElementById('viewStudy');
-    const viewDecks = document.getElementById('viewDecks');
-    const viewEmpty = document.getElementById('viewEmpty');
+    // 3. Restaurar a visibilidade dos elementos visuais
     const mainHeader = document.getElementById('mainHeader');
-
-    // MOSTRAR CABEÇALHO AO SAIR DO ESTUDO
     if(mainHeader) mainHeader.classList.remove('hidden');
 
-    if(viewStudy) viewStudy.classList.add('hidden');
-    if(viewEmpty) viewEmpty.classList.add('hidden');
-    if(viewDecks) viewDecks.classList.remove('hidden');
-    
-    const btnNewFolder = document.getElementById('btnNewFolderHeader');
-    if(btnNewFolder) btnNewFolder.classList.remove('hidden');
+    document.getElementById('viewStudy').classList.add('hidden');
+    document.getElementById('viewDecks').classList.remove('hidden');
+    document.getElementById('viewEmpty').classList.add('hidden');
 
-    loadAnkiData();
+    // 4. CORREÇÃO DO BUG: Decidir como recarregar
+    if (currentCategoryFilter === 'shared') {
+        // Se for compartilhado, busca os dados atualizados na nuvem (Novos/Rev)
+        window.loadSharedDecks();
+    } else {
+        // Se for local, apenas renderiza o que já está na memória (rápido)
+        renderDecksView();
+    }
 };
 
 window.loadSharedDecks = async function() {
     if (!auth.currentUser) return;
     
+    // --- 1. RESET VISUAL MANUAL (Para evitar Loop com showDecksView) ---
+    window.stopTimer(true); // Para o timer se estiver rodando
+    const mainHeader = document.getElementById('mainHeader');
+    if(mainHeader) mainHeader.classList.remove('hidden');
+    
+    // Garante que a tela de estudo sumiu e a de decks apareceu
+    const viewStudy = document.getElementById('viewStudy');
     const viewDecks = document.getElementById('viewDecks');
+    const emptyView = document.getElementById('viewEmpty');
+    if(viewStudy) viewStudy.classList.add('hidden');
+    if(viewDecks) viewDecks.classList.remove('hidden');
+    if(emptyView) emptyView.classList.add('hidden');
+
+    // --- 2. CONFIGURAÇÃO DOS CONTAINERS ---
     const containerDecks = document.getElementById('containerDecks');
     const containerFolders = document.getElementById('containerFolders');
     const emptyState = document.getElementById('viewDecksEmptyState');
     const sectionFolders = document.getElementById('sectionFolders');
     const sectionDecks = document.getElementById('sectionDecks');
 
-    // Limpa a tela e mostra estado de carregamento
-    window.showDecksView(); 
-    containerDecks.innerHTML = '<div class="col-span-full text-center py-10"><i class="fa-solid fa-circle-notch fa-spin text-sky-600 text-2xl"></i><p class="text-gray-400 text-sm mt-2">Buscando compartilhamentos...</p></div>';
+    // Mostra estado de carregamento
+    containerDecks.innerHTML = '<div class="col-span-full text-center py-10"><i class="fa-solid fa-circle-notch fa-spin text-sky-600 text-2xl"></i><p class="text-gray-400 text-sm mt-2">Sincronizando progresso...</p></div>';
     containerFolders.innerHTML = '';
-    sectionFolders.classList.add('hidden');
-    sectionDecks.classList.remove('hidden'); // Usa a área de decks
-    emptyState.classList.add('hidden');
+    if(sectionFolders) sectionFolders.classList.add('hidden');
+    if(sectionDecks) sectionDecks.classList.remove('hidden'); 
+    if(emptyState) emptyState.classList.add('hidden');
 
     const myEmailEnc = encodeEmail(auth.currentUser.email);
     sharedDecksCache = [];
 
     try {
-        // 1. Busca convites no nó global 'global_invites'
         const invitesSnap = await get(ref(db, `global_invites/${myEmailEnc}`));
         
+        // Carrega MEU progresso nos decks compartilhados
+        const myProgressSnap = await get(ref(db, `users/${currentUserUID}/anki/shared_progress`));
+        const myProgress = myProgressSnap.exists() ? myProgressSnap.val() : {};
+
         if (invitesSnap.exists()) {
             const invites = invitesSnap.val();
+            const now = Date.now();
+
             const promises = Object.values(invites).map(async (invite) => {
-                // Para cada convite, busca os cartões originais do dono
                 const ownerCardsSnap = await get(ref(db, `users/${invite.ownerUid}/anki/cards`));
-                let count = 0;
+                let countTotal = 0;
+                let countNew = 0;
+                let countDue = 0;
                 let lastRev = 0;
                 
                 if (ownerCardsSnap.exists()) {
                     const cards = ownerCardsSnap.val();
-                    // Conta quantos cards existem nesse deck específico
-                    Object.values(cards).forEach(c => {
+                    const ownerProgress = myProgress[invite.ownerUid] || {}; // Meu progresso para este dono
+
+                    Object.keys(cards).forEach(cardKey => {
+                        const c = cards[cardKey];
                         if (c.deck === invite.deckPath) {
-                            count++;
-                            if (c.lastReview > lastRev) lastRev = c.lastReview;
+                            countTotal++;
+                            
+                            // LÓGICA DE FUSÃO: Usa meu progresso se existir, senão usa padrão (Novo)
+                            const myCardData = ownerProgress[cardKey] || {};
+                            const nextReview = myCardData.nextReview || 0; // Se não tem progresso, é 0 (Novo)
+                            const interval = myCardData.interval || 0;
+                            const myLastRev = myCardData.lastReview || 0;
+
+                            // Contagem Pessoal
+                            if (nextReview <= now) { 
+                                if (interval === 0) countNew++; else countDue++; 
+                            }
+                            if (myLastRev > lastRev) lastRev = myLastRev;
                         }
                     });
                 }
 
                 return {
                     ...invite,
-                    cardCount: count,
+                    cardCount: countTotal,
+                    newCount: countNew,
+                    dueCount: countDue,
                     lastReview: lastRev
                 };
             });
@@ -286,7 +354,91 @@ window.loadSharedDecks = async function() {
         console.error("Erro ao carregar compartilhados:", e);
     }
 
-    renderDecksView(); // Chama o renderizador que agora vai saber lidar com 'shared'
+    renderDecksView(); 
+};
+
+// --- FUNÇÃO PARA INICIAR ESTUDO COMPARTILHADO ---
+window.startSharedSession = async function(ownerUid, deckPath, role) {
+    // 1. Define estado compartilhado
+    sharedSessionOwner = ownerUid; 
+    currentDeckName = deckPath;
+    
+    const mainHeader = document.getElementById('mainHeader');
+    if(mainHeader) mainHeader.classList.add('hidden');
+    document.getElementById('viewDecks').classList.add('hidden');
+    document.getElementById('viewStudy').classList.remove('hidden');
+    document.getElementById('deckTitleDisplay').innerText = "Carregando e Mesclando...";
+    
+    try {
+        // 2. Busca cards do Dono (Conteúdo)
+        const snap = await get(ref(db, `users/${ownerUid}/anki/cards`));
+        
+        // 3. Busca MEU progresso para esses cards
+        const progressSnap = await get(ref(db, `users/${currentUserUID}/anki/shared_progress/${ownerUid}`));
+        const myProgress = progressSnap.exists() ? progressSnap.val() : {};
+
+        if (!snap.exists()) {
+            alert("Baralho vazio ou não encontrado.");
+            return window.showDecksView();
+        }
+
+        const cardsObj = snap.val();
+        const now = Date.now();
+
+        // 4. Mescla Conteúdo + Meu Progresso
+        const cards = Object.keys(cardsObj)
+            .filter(key => cardsObj[key].deck === deckPath)
+            .map(key => {
+                const original = cardsObj[key];
+                const myData = myProgress[key] || {}; // Pega meu intervalo salvo ou vazio
+
+                return {
+                    ...original, // Traz frente/verso do dono
+                    firebaseKey: key,
+                    // Sobrescreve dados de agendamento com os MEUS dados
+                    interval: myData.interval || 0,
+                    ease: myData.ease || 2.5,
+                    nextReview: myData.nextReview || 0, // Se não tiver, é 0 (agora)
+                    lastReview: myData.lastReview || 0,
+                    lastRating: myData.lastRating || null
+                };
+            });
+
+        if (cards.length === 0) {
+            alert("Este baralho está vazio.");
+            return window.showDecksView();
+        }
+
+        // 5. Filtra o que precisa estudar (baseado nos dados mesclados)
+        // Se for Cramming (Estudo Extra), pega tudo. Se não, pega só vencidos.
+        if (pendingIsCramming) {
+            studyQueue = cards;
+        } else {
+            studyQueue = cards.filter(c => c.nextReview <= now || c.interval === 0);
+        }
+        
+        studyQueue.sort(() => Math.random() - 0.5);
+
+        if (studyQueue.length === 0) {
+            alert("Tudo em dia! Use o modo 'Revisar Tudo' se quiser praticar.");
+            return window.showDecksView();
+        }
+
+        currentCardIndex = 0;
+        document.getElementById('deckTitleDisplay').innerText = deckPath.split('::').pop() + " (Compartilhado)";
+        
+        // Esconde botão de editar (já que o conteúdo é do dono, editar o texto é complexo neste modo)
+        // Mas permitimos se for 'editor' (embora nossa lógica de salvamento abaixo foque no progresso)
+        const editBtn = document.querySelector('#flashcardContainer button[title="Editar Card"]');
+        if(editBtn) editBtn.style.display = 'none'; // Por segurança, desabilita edição de texto no modo estudo individual
+
+        showCurrentCard();
+
+    } catch (e) {
+        console.error("Erro ao carregar compartilhado:", e);
+        alert("Erro de conexão.");
+        window.showDecksView();
+    }
 };
 
 // --- FUNÇÃO DE FILTRO (BUSCA) ---
@@ -453,102 +605,96 @@ async function executeMove(oldPrefix, newPrefix) {
 
 // --- RENDERIZAÇÃO GRID (COM SEÇÕES SEPARADAS + FILTRO) ---
 function renderDecksView() {
-    // --- LÓGICA ESPECIAL PARA ABA COMPARTILHADOS ---
+    // --- LÓGICA ESPECIAL PARA ABA COMPARTILHADOS (NÃO MEXER) ---
     if (currentCategoryFilter === 'shared') {
         const container = document.getElementById('containerDecks');
         const empty = document.getElementById('viewDecksEmptyState');
-        const secDecks = document.getElementById('sectionDecks');
-        const secFolders = document.getElementById('sectionFolders');
+        const sectionDecks = document.getElementById('sectionDecks');
+        const sectionFolders = document.getElementById('sectionFolders');
         
         container.innerHTML = '';
         document.getElementById('containerFolders').innerHTML = '';
-        secFolders.classList.add('hidden');
+        sectionFolders.classList.add('hidden');
         
         if (sharedDecksCache.length === 0) {
             empty.classList.remove('hidden');
-            empty.innerHTML = `
-                <i class="fa-regular fa-paper-plane text-4xl mb-3"></i>
-                <p>Nenhum baralho compartilhado com você.</p>
-            `;
-            secDecks.classList.add('hidden');
+            empty.innerHTML = `<i class="fa-regular fa-paper-plane text-4xl mb-3"></i><p>Nenhum baralho compartilhado com você.</p>`;
+            sectionDecks.classList.add('hidden');
         } else {
             empty.classList.add('hidden');
-            secDecks.classList.remove('hidden');
+            sectionDecks.classList.remove('hidden');
             document.getElementById('countDecks').innerText = sharedDecksCache.length;
 
             sharedDecksCache.forEach(deck => {
                 const cardEl = document.createElement('div');
-                cardEl.className = `bg-white rounded-2xl p-5 shadow-sm border border-indigo-100 hover:shadow-lg hover:border-indigo-300 transition flex flex-col justify-between h-40 group relative overflow-hidden`;
+                const totalDue = deck.newCount + deck.dueCount;
+                const isDue = totalDue > 0;
+                const statusBorder = isDue ? 'border-l-4 border-l-sky-500' : 'border-l-4 border-l-gray-200';
                 
-                // Formata data
+                cardEl.className = `bg-white rounded-2xl p-5 shadow-sm border border-gray-100 hover:shadow-lg transition flex flex-col justify-between h-40 group relative overflow-hidden ${statusBorder}`;
+                
                 let lastRevText = "Nunca";
                 if (deck.lastReview > 0) lastRevText = new Date(deck.lastReview).toLocaleDateString('pt-BR');
 
-                // Badge de Permissão
                 const roleBadge = deck.role === 'editor' 
                     ? '<span class="bg-indigo-100 text-indigo-700 text-[9px] px-2 py-1 rounded font-bold uppercase">Editor</span>'
                     : '<span class="bg-gray-100 text-gray-500 text-[9px] px-2 py-1 rounded font-bold uppercase">Visualizador</span>';
 
+                const removeBtn = `<div class="deck-actions z-30"><button class="btn-deck-action del" onclick="window.unshareDeckAction('${deck.inviteId}', '${encodeEmail(auth.currentUser.email)}', '${btoa(unescape(encodeURIComponent(deck.deckPath))).replace(/=/g,'')}')" title="Remover Acesso"><i class="fa-solid fa-trash"></i></button></div>`;
+                
                 cardEl.innerHTML = `
-                    <div onclick="alert('Funcionalidade de Estudo Compartilhado: Em breve! (Estrutura pronta)')" class="cursor-pointer h-full flex flex-col justify-between">
-                        <div class="mt-2">
-                            <div class="flex justify-between items-start">
-                                <h3 class="font-bold text-gray-800 text-lg group-hover:text-indigo-600 transition truncate pr-2">${deck.deckPath.split('::').pop()}</h3>
+                    ${removeBtn}
+                    <div onclick="window.prepareSharedSession('${deck.ownerUid}', '${deck.deckPath}', '${deck.role}', ${totalDue})" class="cursor-pointer h-full flex flex-col justify-between">
+                        <div class="mt-4"> <div class="flex justify-between items-start">
+                                <h3 class="font-bold text-gray-800 text-lg group-hover:text-sky-600 transition truncate pr-2">${deck.deckPath.split('::').pop()}</h3>
                                 ${roleBadge}
                             </div>
                             <p class="text-[10px] text-gray-400 font-bold uppercase mt-1"><i class="fa-solid fa-user mr-1"></i> ${deck.ownerEmail || 'Usuário'}</p>
-                            <p class="text-[10px] text-gray-400 mt-0.5">${deck.cardCount} Cartas</p>
+                            <p class="text-[9px] text-gray-400 italic mt-0.5">Visto: ${lastRevText}</p>
                         </div>
-                        
                         <div class="flex items-end justify-between mt-1">
-                            <p class="text-[9px] text-gray-300 italic">Visto: ${lastRevText}</p>
-                            <div class="w-8 h-8 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center shadow-sm"><i class="fa-solid fa-play ml-0.5 text-xs"></i></div>
+                            <div class="flex gap-4">
+                                <div><span class="text-xl font-extrabold text-green-500">${deck.newCount}</span><span class="text-[9px] font-bold text-gray-400 uppercase block leading-none">Novos</span></div>
+                                <div><span class="text-xl font-extrabold text-sky-600">${deck.dueCount}</span><span class="text-[9px] font-bold text-gray-400 uppercase block leading-none">Rev</span></div>
+                            </div>
+                            <div class="w-8 h-8 rounded-full ${isDue ? 'bg-sky-100 text-sky-600' : 'bg-gray-100 text-gray-300'} flex items-center justify-center shadow-sm"><i class="fa-solid fa-play ml-0.5 text-xs"></i></div>
                         </div>
                     </div>
                 `;
                 container.appendChild(cardEl);
             });
         }
-        return; // IMPORTANTE: Interrompe a função aqui para não rodar a lógica padrão
+        return;
     }
 
     // --- LÓGICA PADRÃO (MEUS BARALHOS) ---
 
-    // Referências aos Containers
     const breadcrumbContainer = document.getElementById('deckBreadcrumbs');
-    
     const sectionFolders = document.getElementById('sectionFolders');
     const containerFolders = document.getElementById('containerFolders');
     const countFolders = document.getElementById('countFolders');
-    
     const sectionDecks = document.getElementById('sectionDecks');
     const containerDecks = document.getElementById('containerDecks');
     const countDecks = document.getElementById('countDecks');
-    
     const emptyState = document.getElementById('viewDecksEmptyState');
 
-    // Limpeza Inicial
     containerFolders.innerHTML = '';
     containerDecks.innerHTML = '';
     sectionFolders.classList.add('hidden');
     sectionDecks.classList.add('hidden');
     emptyState.classList.add('hidden');
 
-    // --- Breadcrumbs Logic ---
     if (currentPathStack.length === 0) {
         breadcrumbContainer.classList.add('hidden');
     } else {
         breadcrumbContainer.classList.remove('hidden');
-        
         let breadHTML = `<button onclick="window.resetPath()" ondragover="window.handleDragOver(event, '', true)" ondragleave="window.handleDragLeave(event)" ondrop="window.handleDrop(event, '')" class="hover:text-sky-600 flex items-center gap-1 px-2 py-1 rounded transition border border-transparent hover:border-sky-200 hover:bg-sky-50"><i class="fa-solid fa-house"></i> Início</button>`;
-        
         let accumulatedPath = "";
         currentPathStack.forEach((folder, index) => {
             if (index > 0) accumulatedPath += "::";
             accumulatedPath += folder;
             const thisPath = accumulatedPath; 
             breadHTML += ` <span class="text-gray-300 text-xs"><i class="fa-solid fa-chevron-right"></i></span> `;
-            
             if (index === currentPathStack.length - 1) { 
                 breadHTML += `<span class="font-bold text-sky-700 px-2 py-1">${folder}</span>`; 
             } else { 
@@ -558,7 +704,6 @@ function renderDecksView() {
         breadcrumbContainer.innerHTML = breadHTML;
     }
 
-    // --- Agrupamento de Dados ---
     const currentPrefix = currentPathStack.length > 0 ? currentPathStack.join("::") + "::" : "";
     const groups = {}; 
     const now = Date.now();
@@ -591,26 +736,28 @@ function renderDecksView() {
         }
     });
 
-    // 1. Filtragem (NOVA LÓGICA)
     let items = Object.keys(groups);
     if (currentDeckFilter) {
         items = items.filter(name => name.toLowerCase().includes(currentDeckFilter));
     }
 
+    // --- FILTRO DE COMPARTILHADOS (NOVO) ---
+    const sharedPaths = new Set();
+    if (filterOnlyShared) {
+        Object.keys(mySharedDecksMap).forEach(key => {
+            try {
+                const path = decodeURIComponent(escape(atob(key)));
+                sharedPaths.add(path);
+            } catch(e) {}
+        });
+    }
+
     if (items.length === 0) {
-        // Se estiver filtrando, exibe msg de "Não encontrado", se não, msg de "Vazio"
         emptyState.classList.remove('hidden');
         if (currentDeckFilter) {
-            emptyState.innerHTML = `
-                <i class="fa-solid fa-magnifying-glass text-4xl mb-3"></i>
-                <p>Nenhum resultado para "${currentDeckFilter}".</p>
-            `;
+            emptyState.innerHTML = `<i class="fa-solid fa-magnifying-glass text-4xl mb-3"></i><p>Nenhum resultado para "${currentDeckFilter}".</p>`;
         } else {
-            emptyState.innerHTML = `
-                <i class="fa-regular fa-folder-open text-4xl mb-3"></i>
-                <p>Esta pasta está vazia.</p>
-                <p class="text-xs mt-2">Clique em <span class="text-sky-600 cursor-pointer font-bold hover:underline" onclick="window.openCreateModal()">Novo Card</span> para começar.</p>
-            `;
+            emptyState.innerHTML = `<i class="fa-regular fa-folder-open text-4xl mb-3"></i><p>Esta pasta está vazia.</p><p class="text-xs mt-2">Clique em <span class="text-sky-600 cursor-pointer font-bold hover:underline" onclick="window.openCreateModal()">Novo Card</span> para começar.</p>`;
         }
         return;
     }
@@ -620,6 +767,28 @@ function renderDecksView() {
 
     items.sort().forEach(itemName => {
         const info = groups[itemName];
+
+        // --- LÓGICA DE EXIBIÇÃO: FILTRO E TAG ---
+        const deckKey = btoa(unescape(encodeURIComponent(info.fullPath))).replace(/=/g,'');
+        const isSharedOut = mySharedDecksMap[deckKey] ? true : false;
+        
+        if (filterOnlyShared) {
+            // Se for deck, SÓ mostra se for compartilhado
+            if (!info.isFolder && !isSharedOut) return;
+            // Se for pasta, SÓ mostra se tiver algum deck compartilhado DENTRO dela
+            if (info.isFolder) {
+                let containsShared = false;
+                for (let sPath of sharedPaths) {
+                    if (sPath.startsWith(info.fullPath + "::")) {
+                        containsShared = true;
+                        break;
+                    }
+                }
+                if (!containsShared) return;
+            }
+        }
+        // ----------------------------------------
+
         const totalDue = info.due + info.new;
         const isDue = totalDue > 0;
         
@@ -655,7 +824,6 @@ function renderDecksView() {
                             <p class="text-[10px] text-gray-400 mt-0.5 uppercase font-bold tracking-wider">Pasta</p>
                         </div>
                     </div>
-                    
                     <div class="flex items-end justify-between mt-2 pl-1">
                         <div class="flex gap-3 opacity-70">
                             <div><span class="text-lg font-extrabold text-gray-600">${info.new}</span><span class="text-[9px] font-bold text-gray-400 uppercase block leading-none">Novos</span></div>
@@ -668,13 +836,26 @@ function renderDecksView() {
             containerFolders.appendChild(cardEl);
         } else {
             decksAdded++;
+            
+            // TAG COMPARTILHADO (Aparece no deck do DONO)
+            let sharedTagHTML = '';
+            if (isSharedOut) {
+                sharedTagHTML = `
+                    <div class="absolute top-0 left-0 bg-indigo-500 text-white text-[9px] px-2 py-1 rounded-br-lg z-20 font-bold tracking-wide shadow-sm pointer-events-none">
+                        <i class="fa-solid fa-share-nodes mr-1"></i> COMPARTILHADO
+                    </div>
+                `;
+            }
+
             const statusBorder = isDue ? 'border-l-4 border-l-sky-500' : 'border-l-4 border-l-gray-200';
             cardEl.className = `bg-white rounded-2xl p-5 shadow-sm border border-gray-100 hover:shadow-lg transition flex flex-col justify-between h-40 group relative overflow-hidden ${statusBorder}`;
             
             cardEl.innerHTML = `
+                ${sharedTagHTML} 
                 <div class="deck-actions z-30">
                     <div class="drag-handle mr-2" title="Segure para arrastar"><i class="fa-solid fa-grip-vertical"></i></div>
                     <button class="btn-deck-action" onclick="window.openDeckConfig('${info.fullPath}', event)" title="Configurações"><i class="fa-solid fa-gear"></i></button>
+                    <button class="btn-deck-action" onclick="window.quickExportDeck('${info.fullPath}', event)" title="Exportar JSON"><i class="fa-solid fa-download"></i></button>
                     <button class="btn-deck-action" onclick="window.renameDeck('${info.fullPath}', event)" title="Renomear"><i class="fa-solid fa-pen"></i></button>
                     <button class="btn-deck-action del" onclick="window.deleteDeck('${info.fullPath}', event)" title="Excluir"><i class="fa-solid fa-trash"></i></button>
                 </div>
@@ -685,7 +866,6 @@ function renderDecksView() {
                         <p class="text-[10px] text-gray-400 font-bold uppercase mt-0.5">${info.total} Cartas</p>
                         <p class="text-[9px] text-gray-400 italic mt-0.5">Visto: ${lastRevText}</p>
                     </div>
-                    
                     <div class="flex items-end justify-between mt-1">
                         <div class="flex gap-4">
                             <div><span class="text-xl font-extrabold text-green-500">${info.new}</span><span class="text-[9px] font-bold text-gray-400 uppercase block leading-none">Novos</span></div>
@@ -699,7 +879,6 @@ function renderDecksView() {
         }
     });
 
-    // --- Atualiza Visibilidade das Seções ---
     if(foldersAdded > 0) {
         sectionFolders.classList.remove('hidden');
         countFolders.innerText = foldersAdded;
@@ -1017,10 +1196,32 @@ window.toggleFormatUI = function() {
     const lblFront = document.getElementById('lblFrontEditor');
     const lblBack = document.getElementById('lblBackEditor');
     const backInput = document.getElementById('inputBack');
+    
+    // Elemento do container de Certo/Errado (Adicionado no HTML)
+    const objContainer = document.getElementById('objectiveConfigContainer');
+
+    // Reset visual
+    if (objContainer) objContainer.classList.add('hidden');
+    btnCloze.classList.add('hidden');
+    
     if (fmt === 'cloze') {
-        btnCloze.classList.remove('hidden'); lblFront.innerText = "Texto com Oclusão (Use o botão [...])"; lblBack.innerText = "Verso Extra (Opcional)"; backInput.setAttribute('placeholder', 'Deixe vazio para mostrar apenas a frase completa.');
-    } else {
-        btnCloze.classList.add('hidden'); lblFront.innerText = "Frente (Pergunta)"; lblBack.innerText = "Verso (Resposta)"; backInput.setAttribute('placeholder', 'A resposta...');
+        btnCloze.classList.remove('hidden'); 
+        lblFront.innerText = "Texto com Oclusão (Use o botão [...])"; 
+        lblBack.innerText = "Verso Extra (Opcional)"; 
+        backInput.setAttribute('placeholder', 'Deixe vazio para mostrar apenas a frase completa.');
+    } 
+    else if (fmt === 'objective') {
+        // Lógica para Certo/Errado
+        if (objContainer) objContainer.classList.remove('hidden');
+        lblFront.innerText = "Afirmação para Julgar";
+        lblBack.innerText = "Comentário / Justificativa (Aparece após responder)";
+        backInput.setAttribute('placeholder', 'Explique por que está certo ou errado...');
+    }
+    else {
+        // Básico
+        lblFront.innerText = "Frente (Pergunta)"; 
+        lblBack.innerText = "Verso (Resposta)"; 
+        backInput.setAttribute('placeholder', 'A resposta...');
     }
 };
 
@@ -1032,6 +1233,7 @@ window.saveCard = async function() {
     
     const fullDeckPath = selectedCreateFolder === "" ? deckNameSimple : selectedCreateFolder + "::" + deckNameSimple;
     
+    // Verificação de deck existente (código original mantido)
     if (!id) {
         let deckExists = false;
         const cardsArr = Object.values(allCards);
@@ -1055,15 +1257,31 @@ window.saveCard = async function() {
     const legal = document.getElementById('inputLegalBasis').value.trim();
     const link = document.getElementById('inputLink').value.trim();
     
+    // --- NOVA VALIDAÇÃO PARA CERTO/ERRADO ---
+    let objectiveAnswer = null;
+    if (format === 'objective') {
+        const selectedRadio = document.querySelector('input[name="inputObjectiveAnswer"]:checked');
+        if (!selectedRadio) return alert("Para cartões de Julgamento, selecione CERTO ou ERRADO no gabarito.");
+        objectiveAnswer = selectedRadio.value;
+    }
+    // ----------------------------------------
+
     if (!front) return alert("Preencha a Frente do card.");
     
-    const cardData = { deck: fullDeckPath, front, back, category, format, legalBasis: legal, link: link };
+    const cardData = { 
+        deck: fullDeckPath, 
+        front, 
+        back, 
+        category, 
+        format, 
+        legalBasis: legal, 
+        link: link,
+        objectiveAnswer: objectiveAnswer // Salva o gabarito
+    };
     
     try {
         if (id) { 
-            // Atualização de card existente
             const existingCard = allCards[id] || {};
-            // Preserva dados de revisão
             cardData.interval = existingCard.interval;
             cardData.ease = existingCard.ease;
             cardData.nextReview = existingCard.nextReview;
@@ -1073,39 +1291,29 @@ window.saveCard = async function() {
 
             await update(ref(db, `users/${currentUserUID}/anki/cards/${id}`), cardData); 
             
-            // Lógica de Retorno (Gerenciador vs Estudo)
             if (isEditingFromManager) {
                 alert("Card atualizado!");
                 window.closeCreateModal();
-                window.openManagerModal(); // Reabre o gerenciador
-                loadAnkiData().then(() => {
-                     // Recarrega os dados e renderiza a lista se o modal estiver aberto (está, acabamos de abrir)
-                     window.renderManagerList(); 
-                });
+                window.openManagerModal(); 
+                loadAnkiData().then(() => window.renderManagerList()); 
                 return;
             }
 
-            // ATUALIZAÇÃO INTELIGENTE (SEM RELOAD SE ESTIVER ESTUDANDO)
             const viewStudy = document.getElementById('viewStudy');
             if (viewStudy && !viewStudy.classList.contains('hidden')) {
-                // Atualiza o card atual na memória e na fila
                 allCards[id] = { ...existingCard, ...cardData };
-                
-                // Se o card editado for o atual da fila
                 const currentQueueCard = studyQueue[currentCardIndex];
                 if (currentQueueCard && currentQueueCard.firebaseKey === id) {
                     studyQueue[currentCardIndex] = { ...currentQueueCard, ...cardData };
-                    showCurrentCard(); // Re-renderiza o card na tela
+                    showCurrentCard(); 
                 }
-                
                 alert("Card atualizado!");
                 window.closeCreateModal();
-                return; // Sai da função aqui para não recarregar tudo
+                return; 
             } else {
                 alert("Atualizado!"); 
             }
         } else { 
-            // Novo card
             cardData.interval = 0; 
             cardData.ease = 2.5; 
             cardData.nextReview = Date.now(); 
@@ -1118,11 +1326,13 @@ window.saveCard = async function() {
             document.getElementById('inputFront').innerHTML = ''; 
             document.getElementById('inputBack').innerHTML = ''; 
             document.getElementById('inputFront').focus(); 
+            // Limpa a seleção do rádio para o próximo card
+            const radios = document.querySelectorAll('input[name="inputObjectiveAnswer"]');
+            radios.forEach(r => r.checked = false);
         } else { 
             window.closeCreateModal(); 
         }
         
-        // Recarrega tudo apenas se NÃO estiver no modo estudo
         loadAnkiData();
     } catch (e) { console.error(e); alert("Erro ao salvar."); }
 };
@@ -1545,12 +1755,49 @@ function showCurrentCard() {
 
     document.getElementById('studyCounter').innerText = `${studyQueue.length - currentCardIndex} restantes`;
     
+    // GARANTIA: Mostrar o botão Pular novamente ao iniciar um card
+    const btnSkip = document.getElementById('btnSkipCard');
+    if(btnSkip) btnSkip.classList.remove('hidden');
+
     const container = document.getElementById('flashcardContainer');
     container.classList.remove('revealed'); 
     const controls = document.getElementById('studyControls');
     controls.classList.remove('opacity-100', 'pointer-events-auto');
     controls.classList.add('opacity-0', 'pointer-events-none');
     
+    // --- RESET VISUAL DOS BOTÕES E FEEDBACK ---
+    const objActions = document.getElementById('objectiveStudyActions');
+    const feedbackDisplay = document.getElementById('objectiveFeedbackDisplay');
+    const hint = document.getElementById('tapToRevealHint');
+    
+    // Reseta botões (Desbloqueia e restaura cor)
+    const btns = objActions.querySelectorAll('button');
+    btns.forEach(b => {
+        b.disabled = false; 
+        b.classList.remove('opacity-50', 'cursor-not-allowed');
+        
+        // Estilo Base Compacto
+        if(b.innerText.trim() === 'CERTO') {
+            b.className = "bg-green-100 hover:bg-green-200 text-green-700 border border-green-200 px-4 py-2 rounded-lg font-bold text-sm shadow-sm transition w-24";
+        } else {
+            b.className = "bg-red-100 hover:bg-red-200 text-red-700 border border-red-200 px-4 py-2 rounded-lg font-bold text-sm shadow-sm transition w-24";
+        }
+    });
+
+    // Reseta Feedback
+    if(feedbackDisplay) {
+        feedbackDisplay.innerHTML = '';
+        feedbackDisplay.classList.add('hidden');
+    }
+
+    if (card.format === 'objective') {
+        objActions.classList.remove('hidden');
+        hint.classList.add('hidden'); 
+    } else {
+        objActions.classList.add('hidden');
+        hint.classList.remove('hidden');
+    }
+
     const defaults = { easyBonus: 3.5, easyBonusUnit: 'days', goodInterval: 2.5, goodIntervalUnit: 'days', hardInterval: 1.2, hardIntervalUnit: 'days' };
     const s = deckSettings[currentDeckName] || defaults;
     const currentInt = card.interval || 0;
@@ -1574,7 +1821,21 @@ function showCurrentCard() {
 
     setTimeout(() => {
         const safeFront = card.front || "(Sem texto na frente)";
-        const safeBack = card.back || "";
+        let safeBack = card.back || "";
+
+        // --- NOVA MELHORIA: LIMPEZA INTELIGENTE DO GABARITO ---
+        // Se for Certo/Errado, remove palavras repetitivas do início do texto
+        if (card.format === 'objective') {
+            // Regex poderosa: Remove "Certo", "Errado", "Gabarito: Errado", "Gab. Certo" e pontuações (. - :)
+            // Exemplo: "Errado. O Bob..." vira "O Bob..."
+            safeBack = safeBack.replace(/^\s*(?:(?:gabarito|gab)[\s.:-]*)?(?:certo|errado|c|e)[\s.:-]*/i, '');
+            
+            // Se a letra ficou minúscula por causa do corte, coloca maiúscula (ex: "o Bob..." -> "O Bob...")
+            if(safeBack.length > 0) {
+                safeBack = safeBack.charAt(0).toUpperCase() + safeBack.slice(1);
+            }
+        }
+        // ------------------------------------------------------
 
         const frontHTML = processCloze(safeFront, false);
         let backHTML = safeBack;
@@ -1609,6 +1870,11 @@ function showCurrentCard() {
 
 window.revealCard = function() {
     const container = document.getElementById('flashcardContainer');
+    
+    // Esconde o botão Pular assim que revelar
+    const btnSkip = document.getElementById('btnSkipCard');
+    if(btnSkip) btnSkip.classList.add('hidden');
+
     if (!container.classList.contains('revealed')) {
         container.classList.add('revealed');
         setTimeout(() => {
@@ -1617,6 +1883,9 @@ window.revealCard = function() {
         }, 100);
     }
 };
+
+// Mantém o alias
+window.flipCard = window.revealCard;
 
 window.flipCard = window.revealCard;
 
@@ -1630,11 +1899,13 @@ window.rateCard = async function(rating) {
     const now = Date.now();
     const oneDay = 24 * 60 * 60 * 1000;
     
+    // Configurações do Baralho
     const defaults = { easyBonus: 3.5, easyBonusUnit: 'days', goodInterval: 2.5, goodIntervalUnit: 'days', hardInterval: 1.2, hardIntervalUnit: 'days' };
-    const s = deckSettings[currentDeckName] || defaults;
+    const s = (deckSettings && deckSettings[currentDeckName]) ? deckSettings[currentDeckName] : defaults;
     
     let nextInterval = 1, nextEase = card.ease || 2.5;
 
+    // Algoritmo SRS
     if (rating === 'again') { 
         nextInterval = 0; 
         nextEase = Math.max(1.3, nextEase - 0.2); 
@@ -1656,47 +1927,78 @@ window.rateCard = async function(rating) {
 
     if (nextInterval < 0.0001 && rating !== 'again') nextInterval = 0.0007;
 
-    const updates = {};
-    updates[`users/${currentUserUID}/anki/cards/${card.firebaseKey}`] = {
-        ...card, interval: nextInterval, ease: nextEase, nextReview: now + (nextInterval * oneDay), lastReview: now, lastRating: rating
-    };
-
+    // --- LÓGICA DE SALVAMENTO ---
     try {
+        const updates = {};
+        
+        const progressData = {
+            interval: nextInterval,
+            ease: nextEase,
+            nextReview: now + (nextInterval * oneDay),
+            lastReview: now,
+            lastRating: rating
+        };
+
+        if (sharedSessionOwner) {
+            // MODO COMPARTILHADO (Salva no seu progresso isolado)
+            updates[`users/${currentUserUID}/anki/shared_progress/${sharedSessionOwner}/${card.firebaseKey}`] = progressData;
+        } else {
+            // MODO LOCAL (Seus Baralhos)
+            // 1. Prepara atualização para nuvem
+            const updatedCard = { ...card, ...progressData };
+            updates[`users/${currentUserUID}/anki/cards/${card.firebaseKey}`] = updatedCard;
+            
+            // 2. CORREÇÃO DO BUG: Atualiza a memória local IMEDIATAMENTE
+            // Isso garante que ao voltar para o menu, os números estejam certos sem F5
+            if (allCards[card.firebaseKey]) {
+                allCards[card.firebaseKey] = updatedCard;
+            }
+        }
+
         await update(ref(db), updates);
+
         currentCardIndex++;
         showCurrentCard();
         
-    } catch (e) { console.error(e); }
+    } catch (e) { 
+        console.error("Erro ao salvar progresso:", e);
+        currentCardIndex++;
+        showCurrentCard();
+    }
 };
 
-// --- IMPORT / EXPORT MANAGERS ---
-
-window.openManagerModal = function() { 
-    document.getElementById('managerModal').classList.remove('hidden'); 
-    window.switchManagerTab('list'); 
+// --- FUNÇÕES DE GERENCIAMENTO (MODAL) QUE ESTAVAM FALTANDO ---
+window.openManagerModal = function() {
+    document.getElementById('managerModal').classList.remove('hidden');
+    // Abre por padrão na aba de lista
+    window.switchManagerTab('list');
 };
 
-window.closeManagerModal = function() { 
-    document.getElementById('managerModal').classList.add('hidden'); 
+window.closeManagerModal = function() {
+    document.getElementById('managerModal').classList.add('hidden');
 };
 
 window.switchManagerTab = function(tabName) {
+    const viewList = document.getElementById('managerTabView_List');
+    const viewIO = document.getElementById('managerTabView_IO');
+    // Seleciona botões de aba dentro do managerModal
     const btns = document.querySelectorAll('#managerModal .config-tab-btn');
-    btns.forEach(b => b.classList.remove('active'));
-    
-    const list = document.getElementById('managerTabView_List');
-    const io = document.getElementById('managerTabView_IO');
-    
-    if(tabName === 'list') {
-        list.classList.remove('hidden');
-        io.classList.add('hidden');
-        btns[0].classList.add('active');
-        window.renderManagerList();
+
+    if (tabName === 'list') {
+        viewList.classList.remove('hidden');
+        viewIO.classList.add('hidden');
+        if(btns[0]) btns[0].classList.add('active');
+        if(btns[1]) btns[1].classList.remove('active');
+        window.renderManagerList(); // Recarrega a lista ao voltar para ela
     } else {
-        list.classList.add('hidden');
-        io.classList.remove('hidden');
-        btns[1].classList.add('active');
-        populateExportImportSelects();
+        viewList.classList.add('hidden');
+        viewIO.classList.remove('hidden');
+        if(btns[0]) btns[0].classList.remove('active');
+        if(btns[1]) btns[1].classList.add('active');
+        // Popula os selects de importação/exportação
+        if(typeof populateExportImportSelects === 'function') {
+            populateExportImportSelects();
+        }
     }
 };
 
@@ -1851,13 +2153,9 @@ window.deleteCard = async function(id) {
 window.editCard = function(id) {
     const card = allCards[id]; if(!card) return;
     
-    // Fechamos o modal anterior (manager)
     window.closeManagerModal(); 
-    
-    // Abrimos o editor
     window.openCreateModal();
     
-    // LÓGICA DE NAVEGAÇÃO: Veio do Manager, então mostra o botão VOLTAR
     isEditingFromManager = true;
     document.getElementById('btnBackToManager').classList.remove('hidden');
     
@@ -1879,8 +2177,17 @@ window.editCard = function(id) {
     document.getElementById('inputLink').value = card.link || '';
     
     window.setModalCategory(card.category || 'conteudo');
+    
+    // Define o formato e atualiza a UI
     document.getElementById('inputCardFormat').value = card.format || 'basic';
     window.toggleFormatUI();
+
+    // --- CARREGAR GABARITO ---
+    if (card.format === 'objective' && card.objectiveAnswer) {
+        const radio = document.querySelector(`input[name="inputObjectiveAnswer"][value="${card.objectiveAnswer}"]`);
+        if (radio) radio.checked = true;
+    }
+    // -------------------------
 };
 
 window.wrapCloze = function() { 
@@ -1944,3 +2251,129 @@ document.addEventListener('click', (e) => {
         }
     }
 });
+
+// --- TIMER COMPARTILHADO ---
+
+window.prepareSharedSession = function(ownerUid, deckPath, role, totalDue) {
+    // Guarda os dados para usar depois que o usuário escolher o tempo
+    pendingSharedData = { ownerUid, deckPath, role };
+    
+    // Usa a mesma lógica de abrir o modal do deck local
+    // Se totalDue > 0, modo normal. Se 0, pergunta Cramming.
+    if (totalDue > 0) {
+        openTimerConfig(deckPath + " (Compartilhado)", false);
+    } else if (confirm(`Este baralho compartilhado está em dia! \n\nGostaria de revisar tudo novamente (Modo Cramming)?`)) {
+        openTimerConfig(deckPath + " (Compartilhado)", true);
+    }
+};
+
+window.confirmTimerStart = function() {
+    let seconds = 0;
+    
+    if (studyTimerMode === 'timer') {
+        const mins = parseInt(document.getElementById('inputTimerMinutes').value) || 25;
+        seconds = mins * 60;
+    } else {
+        seconds = 0; // Stopwatch starts at 0, None uses 0
+    }
+    
+    document.getElementById('timerConfigModal').classList.add('hidden');
+    
+    // VERIFICAÇÃO: É uma sessão compartilhada ou local?
+    if (pendingSharedData) {
+        // Inicia Sessão Compartilhada
+        startSharedSession(pendingSharedData.ownerUid, pendingSharedData.deckPath, pendingSharedData.role);
+        pendingSharedData = null; // Limpa para a próxima
+    } else {
+        // Inicia Sessão Local
+        startStudySession(pendingDeckName, pendingIsCramming);
+    }
+    
+    // Inicia o Timer se não for 'none'
+    if (studyTimerMode !== 'none') {
+        initStudyTimer(studyTimerMode, seconds);
+    } else {
+        document.getElementById('studyTimerContainer').classList.add('hidden');
+    }
+};
+
+// --- EXPORTAÇÃO RÁPIDA (Atalho no Grid) ---
+window.quickExportDeck = function(deckPath, event) {
+    if(event) event.stopPropagation(); // Não abrir o baralho ao clicar no botão
+    
+    // 1. Abre o Modal
+    window.openManagerModal();
+    
+    // 2. Troca para a aba de Importar/Exportar
+    window.switchManagerTab('io');
+    
+    // 3. Pré-seleciona o baralho (Delay pequeno para garantir que o select foi populado)
+    setTimeout(() => {
+        const select = document.getElementById('exportDeckSelect');
+        if(select) {
+            select.value = deckPath;
+            // Efeito visual para mostrar que foi selecionado
+            select.style.borderColor = '#0ea5e9'; // Sky 500
+            setTimeout(() => select.style.borderColor = '', 1000);
+        }
+    }, 100);
+};
+
+//card certo e errado
+window.checkObjectiveAnswer = function(userChoice, event) {
+    if(event) event.stopPropagation(); 
+
+    const card = studyQueue[currentCardIndex];
+    if (!card || !card.objectiveAnswer) {
+        window.revealCard();
+        return;
+    }
+    
+    // --- NOVO: BLOQUEIA TODOS OS BOTÕES IMEDIATAMENTE ---
+    const allBtns = document.querySelectorAll('#objectiveStudyActions button');
+    allBtns.forEach(b => {
+        b.disabled = true;
+        b.classList.add('opacity-50', 'cursor-not-allowed');
+        // Remove transformações de hover para não parecer clicável
+        b.classList.remove('hover:bg-green-200', 'hover:bg-red-200', 'transform', 'scale-110');
+    });
+    // ----------------------------------------------------
+
+    const btn = event.target;
+    // Remove a opacidade do botão clicado para ele ficar em destaque (opcional, mas fica bonito)
+    btn.classList.remove('opacity-50'); 
+
+    const isCorrect = (userChoice === card.objectiveAnswer);
+    const feedbackEl = document.getElementById('objectiveFeedbackDisplay');
+
+    if (isCorrect) {
+        btn.className = "bg-green-500 text-white border border-green-600 px-4 py-2 rounded-lg font-bold text-sm shadow-md w-24 scale-105 transition cursor-not-allowed";
+        
+        if(feedbackEl) {
+            feedbackEl.innerHTML = `
+                <div class="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-green-50 border border-green-100 animate-fade-in shadow-sm">
+                    <i class="fa-solid fa-circle-check text-green-500 text-base"></i>
+                    <span class="text-green-700 font-bold text-sm">Correto!</span>
+                </div>
+            `;
+            feedbackEl.classList.remove('hidden');
+        }
+
+    } else {
+        btn.className = "bg-red-500 text-white border border-red-600 px-4 py-2 rounded-lg font-bold text-sm shadow-md w-24 shake-animation transition cursor-not-allowed";
+        
+        if(feedbackEl) {
+            feedbackEl.innerHTML = `
+                <div class="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-red-50 border border-red-100 animate-fade-in shadow-sm">
+                    <i class="fa-solid fa-circle-xmark text-red-500 text-base"></i>
+                    <span class="text-red-600 font-bold text-sm">Você errou.</span>
+                </div>
+            `;
+            feedbackEl.classList.remove('hidden');
+        }
+    }
+
+    setTimeout(() => {
+        window.revealCard();
+    }, 600);
+};
