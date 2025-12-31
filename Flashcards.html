@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flashcards - Foco Total</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        /* ESTILOS ESPECÍFICOS DO ANKI */
+        .flashcard-container {
+            width: 100%; background: white; border-radius: 1.5rem;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1); border: 1px solid #e2e8f0;
+            overflow: hidden; display: flex; flex-direction: column; min-height: 450px; /* Aumentei um pouco */
+        }
+        .flashcard-section { padding: 2.5rem; position: relative; } /* Mais espaçamento interno */
+        .flashcard-front { background: #ffffff; color: #1e293b; flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; }
+        .flashcard-back { background: #f0f9ff; color: #0f172a; border-top: 2px dashed #bae6fd; display: none; flex: 1; flex-direction: column; justify-content: center; align-items: center; }
+        .flashcard-container.revealed .flashcard-back { display: flex; animation: fadeIn 0.5s ease; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* Botões de Resposta (Estilo Vertical) */
+        .btn-ans { transition: all 0.2s; transform: scale(1); }
+        .btn-ans:hover { transform: scale(1.05); z-index: 10; }
+        .btn-ans:active { transform: scale(0.95); }
+
+        /* EDITOR E TABS */
+        .editor-toolbar { display: flex; gap: 4px; padding: 6px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px 8px 0 0; flex-wrap: wrap; align-items: center; }
+        .editor-content { min-height: 100px; max-height: 150px; overflow-y: auto; padding: 10px; border: 1px solid #e2e8f0; border-top: none; border-radius: 0 0 8px 8px; outline: none; font-size: 14px; background: white; }
+        .editor-content:focus { border-color: #38bdf8; }
+        .nt-btn { width: 28px; height: 28px; border-radius: 4px; display: flex; align-items: center; justify-content: center; color: #64748b; cursor: pointer; transition: 0.2s; }
+        .nt-btn:hover { background: #e2e8f0; color: #0284c7; }
+        
+        .main-nav-tab { padding: 0 20px; height: 100%; display: flex; align-items: center; gap: 8px; cursor: pointer; border-bottom: 3px solid transparent; color: #64748b; font-weight: 600; font-size: 14px; transition: all 0.2s; }
+        .main-nav-tab:hover { color: #0284c7; background: #f8fafc; }
+        .main-nav-tab.active { color: #0284c7; border-bottom-color: #0284c7; }
+
+        .modal-cat-tab { flex: 1; text-align: center; padding: 10px; cursor: pointer; border: 1px solid #e2e8f0; margin-bottom: -1px; background: #f8fafc; color: #94a3b8; font-weight: 600; font-size: 13px; transition: all 0.2s; }
+        .modal-cat-tab:first-child { border-radius: 8px 0 0 8px; }
+        .modal-cat-tab:last-child { border-radius: 0 8px 8px 0; }
+        .modal-cat-tab.active { background: #fff; color: #0284c7; border-color: #0284c7; z-index: 10; border-bottom-color: white; }
+        
+        .cloze-bracket { color: #2563eb; font-weight: 800; background-color: #dbeafe; padding: 0 4px; border-radius: 4px; border: 1px dashed #2563eb; }
+        .cloze-revealed { color: #166534; font-weight: 800; background-color: #dcfce7; padding: 0 4px; border-radius: 4px; border: 1px solid #16a34a; }
+
+        .deck-actions { position: absolute; top: 10px; right: 10px; display: flex; gap: 5px; opacity: 0; transition: opacity 0.2s; }
+        .group:hover .deck-actions { opacity: 1; }
+        .btn-deck-action { width: 26px; height: 26px; border-radius: 50%; background: white; display: flex; align-items: center; justify-content: center; font-size: 11px; color: #64748b; border: 1px solid #e2e8f0; cursor: pointer; z-index: 20; }
+        .btn-deck-action:hover { color: #0284c7; border-color: #0284c7; }
+        .btn-deck-action.del:hover { color: #ef4444; border-color: #ef4444; }
+
+        .color-popover { position: absolute; background: white; border: 1px solid #cbd5e1; padding: 8px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); z-index: 60; display: none; grid-template-columns: repeat(4, 1fr); gap: 4px; width: 140px; }
+        .color-popover.show { display: grid; }
+        .color-swatch { width: 24px; height: 24px; border-radius: 4px; cursor: pointer; border: 1px solid #e2e8f0; }
+        .card-html-content table { border-collapse: collapse; width: 100%; border: 1px solid #000; margin: 5px 0; }
+        .card-html-content th, .card-html-content td { border: 1px solid #000; padding: 4px; font-size: 0.9em; }
+
+        .config-tab-btn { flex: 1; text-align: center; padding: 12px; font-weight: 600; color: #64748b; border-bottom: 2px solid transparent; cursor: pointer; }
+        .config-tab-btn.active { color: #0284c7; border-bottom-color: #0284c7; background: #f8fafc; }
+        
+        .rating-badge { font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 700; text-transform: uppercase; }
+        .rating-again { background: #fee2e2; color: #dc2626; }
+        .rating-hard { background: #ffedd5; color: #ea580c; }
+        .rating-good { background: #dcfce7; color: #16a34a; }
+        .rating-easy { background: #e0f2fe; color: #0284c7; }
+        .rating-none { background: #f1f5f9; color: #94a3b8; }
+
+        /* --- ESTILOS DA ÁRVORE DE PASTAS --- */
+        .tree-container { padding: 10px; font-size: 14px; color: #334155; }
+        .tree-ul { list-style: none; padding-left: 20px; border-left: 1px solid #e2e8f0; margin-left: 7px; display: block; }
+        .tree-ul.hidden { display: none; }
+        
+        .tree-row { 
+            display: flex; align-items: center; padding: 6px 8px; border-radius: 6px; cursor: pointer; transition: all 0.15s; margin-bottom: 2px;
+        }
+        .tree-row:hover { background-color: #f1f5f9; }
+        .tree-row.selected { background-color: #e0f2fe; color: #0284c7; font-weight: 700; border: 1px solid #bae6fd; }
+        .tree-row.disabled { opacity: 0.5; cursor: not-allowed; background-color: transparent !important; color: #94a3b8; }
+        
+        .tree-toggle { 
+            width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; 
+            margin-right: 4px; border-radius: 4px; color: #94a3b8; transition: transform 0.2s;
+        }
+        .tree-toggle:hover { background-color: #e2e8f0; color: #475569; }
+        .tree-toggle.rotated { transform: rotate(90deg); color: #475569; }
+        .tree-toggle.invisible { visibility: hidden; }
+
+        .tree-icon { margin-right: 8px; font-size: 16px; }
+        .tree-icon.folder { color: #f59e0b; }
+        .tree-icon.deck { color: #64748b; font-size: 14px; }
+        .tree-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+        /* --- NOVOS ESTILOS DO TEMPORIZADOR (Compacto) --- */
+        .timer-widget {
+            display: flex; align-items: center; gap: 8px;
+            background: #ffffff; border: 1px solid #e2e8f0;
+            padding: 4px 12px; border-radius: 9999px;
+            font-family: monospace; font-weight: 700; color: #475569;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            transition: all 0.2s;
+            height: 40px; /* Altura fixa para alinhar com botões */
+        }
+        .timer-widget.active { border-color: #38bdf8; color: #0284c7; background: #f0f9ff; }
+        .timer-widget.paused { border-color: #fbbf24; color: #d97706; background: #fffbeb; }
+        
+        .timer-display { font-size: 1.1rem; letter-spacing: 1px; min-width: 60px; text-align: center; }
+        
+        .timer-btn {
+            width: 28px; height: 28px; border-radius: 50%; border: none;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; transition: all 0.2s; background: #f8fafc;
+            color: #64748b; border: 1px solid #e2e8f0; font-size: 10px;
+        }
+        .timer-btn:hover { background: #e2e8f0; color: #0f172a; }
+        
+        /* Modal Opções de Tempo */
+        .timer-option-btn {
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            padding: 1.5rem; border: 2px solid #e2e8f0; border-radius: 1rem;
+            cursor: pointer; transition: all 0.2s; background: white; color: #64748b;
+        }
+        .timer-option-btn:hover { border-color: #bae6fd; background: #f0f9ff; color: #0284c7; }
+        .timer-option-btn.selected { border-color: #0284c7; background: #f0f9ff; color: #0284c7; box-shadow: 0 0 0 2px #bae6fd; }
+        .timer-icon { font-size: 2rem; margin-bottom: 0.5rem; }
+
+        /* Rotação do Chevron */
+        .chevron-icon { transition: transform 0.3s; }
+        .rotated { transform: rotate(180deg); }
+        /* Ocultação suave */
+        .section-content { transition: all 0.3s ease-out; overflow: hidden; max-height: 2000px; opacity: 1; }
+        .section-content.collapsed { max-height: 0; opacity: 0; padding: 0 !important; margin: 0 !important; }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800 h-screen flex overflow-hidden font-sans">
+
+    <div id="sidebar-container"></div>
+
+    <main class="flex-1 flex flex-col min-w-0 bg-gray-100 overflow-hidden relative">
+        
+        <header id="mainHeader" class="bg-white border-b border-gray-200 shadow-sm shrink-0 z-20">
+            <div class="h-16 px-6 flex justify-between items-center">
+                <div class="h-full flex items-center gap-6">
+                    <h1 class="text-xl font-bold text-gray-800 flex items-center gap-2 mr-4">
+                        <i class="fa-solid fa-layer-group text-sky-600"></i> Flashcards
+                    </h1>
+                    
+                    <div class="flex h-full" id="mainNavContainer">
+                        <div class="main-nav-tab active" onclick="window.switchMainTab('conteudo')" id="nav-conteudo">
+                            <i class="fa-solid fa-book-open"></i> Conteúdo
+                        </div>
+                        <div class="main-nav-tab" onclick="window.switchMainTab('jurisprudencia')" id="nav-juris">
+                            <i class="fa-solid fa-gavel"></i> Jurisprudência
+                        </div>
+                        <div class="main-nav-tab" onclick="window.switchMainTab('shared')" id="nav-shared">
+                            <i class="fa-solid fa-users"></i> Compartilhados
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-3">
+                    <button id="btnNewFolderHeader" onclick="window.createFolderFlow()" class="w-9 h-9 rounded-full bg-white border border-gray-200 text-gray-500 hover:text-sky-600 flex items-center justify-center transition shadow-sm" title="Nova Pasta">
+                        <i class="fa-solid fa-folder-plus"></i>
+                    </button>
+
+                    <button onclick="window.openManagerModal()" class="w-9 h-9 rounded-full bg-white border border-gray-200 text-gray-500 hover:text-sky-600 flex items-center justify-center transition shadow-sm" title="Gerenciar Cartões">
+                        <i class="fa-solid fa-list-check"></i>
+                    </button>
+                    <button onclick="window.openCreateModal()" class="bg-sky-600 hover:bg-sky-700 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-md transition flex items-center gap-2">
+                        <i class="fa-solid fa-plus"></i> Novo Card
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <div class="flex-1 overflow-y-auto p-6 relative">
+            
+            <div class="flex flex-wrap items-center justify-between mb-6 gap-3">
+                <div id="deckBreadcrumbs" class="hidden flex items-center gap-2 text-sm font-medium text-gray-500 bg-white px-4 py-2 rounded-lg shadow-sm border border-gray-100"></div>
+                
+                <div class="relative group ml-auto">
+                    <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 group-hover:text-sky-500 transition"></i>
+                    <input type="text" id="deckSearchInput" oninput="window.filterDecks(this.value)" placeholder="Filtrar..." class="pl-9 pr-3 py-2 rounded-lg border border-gray-200 text-sm font-bold text-gray-700 w-48 focus:w-64 transition-all outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100 shadow-sm bg-white">
+                </div>
+            </div>
+
+            <div id="viewDecks" class="pb-20">
+                
+                <div id="sectionFolders" class="mb-8 hidden group/section">
+                    <button onclick="window.toggleDeckSection('sectionFolders')" class="flex items-center gap-3 w-fit pr-6 text-left mb-4 p-2 rounded-2xl transition-all duration-200 border border-amber-100/50 bg-amber-50/40 hover:bg-amber-100 hover:border-amber-200 select-none shadow-sm">
+                        <div class="w-8 h-8 rounded-xl bg-amber-100 text-amber-500 flex items-center justify-center shadow-sm transition-transform duration-200 group-hover/section:scale-110">
+                            <i class="fa-solid fa-folder text-sm"></i>
+                        </div>
+                        
+                        <div>
+                            <h3 class="text-sm font-bold text-gray-700 flex items-center gap-2">
+                                Pastas
+                                <span id="countFolders" class="text-[9px] bg-white border border-amber-200 text-amber-600 font-extrabold px-1.5 py-0.5 rounded-full">0</span>
+                            </h3>
+                        </div>
+                        <div class="w-6 h-6 rounded-full bg-white/80 flex items-center justify-center text-gray-400 transition-transform duration-300 chevron-icon ml-1">
+                            <i class="fa-solid fa-chevron-down text-xs"></i>
+                        </div>
+                    </button>
+                    <div id="containerFolders" class="section-content grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 pl-2 border-l-2 border-dashed border-gray-200 ml-4">
+                        </div>
+                </div>
+
+                <div id="sectionDecks" class="mb-8 hidden group/section">
+                    <button onclick="window.toggleDeckSection('sectionDecks')" class="flex items-center gap-3 w-fit pr-6 text-left mb-4 p-2 rounded-2xl transition-all duration-200 border border-sky-100/50 bg-sky-50/40 hover:bg-sky-100 hover:border-sky-200 select-none shadow-sm">
+                        <div class="w-8 h-8 rounded-xl bg-sky-100 text-sky-600 flex items-center justify-center shadow-sm transition-transform duration-200 group-hover/section:scale-110">
+                            <i class="fa-solid fa-layer-group text-sm"></i>
+                        </div>
+                        
+                        <div>
+                            <h3 class="text-sm font-bold text-gray-700 flex items-center gap-2">
+                                Baralhos
+                                <span id="countDecks" class="text-[9px] bg-white border border-sky-200 text-sky-600 font-extrabold px-1.5 py-0.5 rounded-full">0</span>
+                            </h3>
+                        </div>
+                        <div class="w-6 h-6 rounded-full bg-white/80 flex items-center justify-center text-gray-400 transition-transform duration-300 chevron-icon ml-1">
+                            <i class="fa-solid fa-chevron-down text-xs"></i>
+                        </div>
+                    </button>
+                    <div id="containerDecks" class="section-content grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 pl-2 border-l-2 border-dashed border-gray-200 ml-4">
+                        </div>
+                </div>
+                
+                <div id="viewDecksEmptyState" class="hidden text-center py-20 text-gray-400 opacity-60">
+                    <i class="fa-regular fa-folder-open text-4xl mb-3"></i>
+                    <p>Esta pasta está vazia.</p>
+                    <p class="text-xs mt-2">Clique em <span class="text-sky-600 cursor-pointer font-bold hover:underline" onclick="window.openCreateModal()">Novo Card</span> para começar.</p>
+                </div>
+            </div>
+
+            <div id="viewStudy" class="hidden h-full flex flex-col pt-4 max-w-7xl mx-auto overflow-y-auto pb-20 px-4">
+                
+                <div class="flex justify-between items-center w-full mb-6 relative">
+                    <button onclick="window.backToFolder()" class="bg-white border border-gray-300 text-gray-600 hover:text-sky-600 hover:border-sky-300 hover:bg-sky-50 px-5 py-2 rounded-lg shadow-sm text-sm font-bold flex items-center gap-2 transition transform active:scale-95 z-20">
+                        <i class="fa-solid fa-arrow-left"></i> Voltar
+                    </button>
+
+                    <div id="studyTimerContainer" class="hidden absolute left-1/2 transform -translate-x-1/2 z-10">
+                        <div id="studyTimerWidget" class="timer-widget">
+                            <button class="timer-btn" onclick="window.toggleTimer()" title="Pausar/Continuar"><i id="timerIcon" class="fa-solid fa-pause"></i></button>
+                            <div id="timerDisplay" class="timer-display">00:00</div>
+                            <button class="timer-btn" onclick="window.stopTimer()" title="Parar"><i class="fa-solid fa-stop"></i></button>
+                        </div>
+                    </div>
+
+                    <button onclick="window.skipCard()" class="bg-white border border-gray-300 text-gray-600 hover:text-amber-600 hover:border-amber-300 hover:bg-amber-50 px-5 py-2 rounded-lg shadow-sm text-sm font-bold flex items-center gap-2 transition transform active:scale-95 z-20">
+                        Pular <i class="fa-solid fa-chevron-right"></i>
+                    </button>
+                </div>
+
+                <div class="w-full text-center mb-6">
+                    <h2 id="deckTitleDisplay" class="text-3xl md:text-4xl font-extrabold text-sky-700 tracking-tight drop-shadow-sm"></h2>
+                    <span id="studyCounter" class="text-xs font-bold text-gray-400 uppercase tracking-widest mt-1 block">0 restantes</span>
+                </div>
+
+                <div class="flex flex-col md:flex-row gap-6 items-start justify-center h-full w-full">
+                    
+                    <div id="studyControls" class="opacity-0 pointer-events-none transition-all duration-500 flex flex-row md:flex-col gap-3 w-full md:w-32 shrink-0 order-2 md:order-1 justify-center">
+                        <button onclick="window.rateCard('again')" class="btn-ans py-4 rounded-xl bg-red-50 text-red-600 font-bold text-sm border-2 border-red-100 shadow-sm hover:bg-red-100 hover:border-red-300 flex flex-col items-center justify-center h-20 md:h-24">
+                            <span class="text-[10px] opacity-70 mb-1 uppercase tracking-wider">Errei</span>
+                            <span id="timeAgain" class="text-sm font-black">1 min</span>
+                        </button>
+                        <button onclick="window.rateCard('hard')" class="btn-ans py-4 rounded-xl bg-orange-50 text-orange-600 font-bold text-sm border-2 border-orange-100 shadow-sm hover:bg-orange-100 hover:border-orange-300 flex flex-col items-center justify-center h-20 md:h-24">
+                            <span class="text-[10px] opacity-70 mb-1 uppercase tracking-wider">Difícil</span>
+                            <span id="timeHard" class="text-sm font-black">1 dia</span>
+                        </button>
+                        <button onclick="window.rateCard('good')" class="btn-ans py-4 rounded-xl bg-green-50 text-green-600 font-bold text-sm border-2 border-green-100 shadow-sm hover:bg-green-100 hover:border-green-300 flex flex-col items-center justify-center h-20 md:h-24">
+                            <span class="text-[10px] opacity-70 mb-1 uppercase tracking-wider">Bom</span>
+                            <span id="timeGood" class="text-sm font-black">3 dias</span>
+                        </button>
+                        <button onclick="window.rateCard('easy')" class="btn-ans py-4 rounded-xl bg-sky-50 text-sky-600 font-bold text-sm border-2 border-sky-100 shadow-sm hover:bg-sky-100 hover:border-sky-300 flex flex-col items-center justify-center h-20 md:h-24">
+                            <span class="text-[10px] opacity-70 mb-1 uppercase tracking-wider">Fácil</span>
+                            <span id="timeEasy" class="text-sm font-black">5 dias</span>
+                        </button>
+                    </div>
+
+                    <div class="flex-1 w-full max-w-3xl order-1 md:order-2 cursor-pointer transition-transform duration-200 active:scale-[0.99]" onclick="window.revealCard()">
+                        <div id="flashcardContainer" class="flashcard-container relative group">
+                            
+                            <button onclick="window.editCurrentStudyCard(event)" class="absolute top-9 right-2 text-gray-300 hover:text-sky-600 transition p-2 z-50" title="Editar Card">
+                                <i class="fa-solid fa-pen"></i>
+                            </button>
+
+                            <div class="flashcard-section flashcard-front relative">
+                                <div id="cardTypeBadge" class="absolute top-0 right-0 bg-gray-100 text-gray-500 text-[10px] font-bold px-3 py-1 rounded-bl-xl uppercase tracking-wider">Geral</div>
+                                <span id="lblFrontDisplay" class="absolute top-6 left-6 text-[10px] font-bold text-gray-300 uppercase tracking-[0.2em]">Pergunta</span>
+                                <div id="cardFrontText" class="text-2xl text-center leading-relaxed w-full px-8 mt-4 card-html-content font-medium text-gray-700"></div>
+                                <div id="tapToRevealHint" class="text-xs text-gray-300 text-center mt-12 animate-pulse absolute bottom-6 w-full left-0">
+                                    <i class="fa-regular fa-hand-pointer mr-1"></i> Toque para revelar
+                                </div>
+                            </div>
+                            <div class="flashcard-section flashcard-back relative">
+                                <span id="lblBackDisplay" class="absolute top-6 left-6 text-[10px] font-bold text-sky-200 uppercase tracking-[0.2em]">Resposta</span>
+                                <div id="cardBackText" class="text-lg text-center leading-relaxed w-full px-8 mt-4 mb-4 card-html-content text-gray-800"></div>
+                                <div id="cardFooterInfo" class="bg-sky-50 p-3 rounded-lg border border-sky-100 flex flex-col gap-1 text-center hidden mt-6 mx-8">
+                                    <div id="cardLegalBasis" class="text-xs text-sky-800 font-bold italic"></div>
+                                    <a id="cardExternalLink" href="#" target="_blank" class="text-[10px] font-bold text-sky-600 hover:underline flex items-center justify-center gap-1"><i class="fa-solid fa-external-link-alt"></i> Acessar Fonte</a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="hidden md:block w-32 shrink-0 order-3"></div>
+                </div>
+            </div>
+
+            <div id="viewEmpty" class="hidden h-full flex flex-col items-center justify-center text-center">
+                <div class="w-24 h-24 bg-green-100 text-green-500 rounded-full flex items-center justify-center text-4xl mb-6 shadow-sm animate-bounce"><i class="fa-solid fa-check"></i></div>
+                <h2 class="text-3xl font-bold text-gray-800 mb-2">Sessão Concluída!</h2>
+                <p class="text-gray-500">Você zerou a fila deste baralho por enquanto.</p>
+                <button onclick="window.showDecksView()" class="mt-8 px-8 py-3 bg-sky-600 text-white rounded-xl font-bold shadow-lg hover:bg-sky-700 transition transform hover:-translate-y-1">Voltar aos Baralhos</button>
+            </div>
+        </div>
+    </main>
+
+    <div id="timerConfigModal" class="fixed inset-0 bg-black/60 hidden z-[70] flex items-center justify-center backdrop-blur-sm">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 animate-fade-in relative">
+            
+            <button onclick="document.getElementById('timerConfigModal').classList.add('hidden')" class="absolute top-4 right-4 text-gray-400 hover:text-red-500 transition w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100" title="Cancelar">
+                <i class="fa-solid fa-xmark text-lg"></i>
+            </button>
+
+            <h3 class="text-xl font-bold text-gray-800 text-center mb-6">Modo de Tempo</h3>
+            
+            <div class="grid grid-cols-3 gap-4 mb-6">
+                <div class="timer-option-btn" onclick="window.selectTimerMode('stopwatch', this)">
+                    <i class="fa-solid fa-stopwatch timer-icon"></i>
+                    <span class="font-bold text-sm">Cronômetro</span>
+                </div>
+                <div class="timer-option-btn" onclick="window.selectTimerMode('timer', this)">
+                    <i class="fa-solid fa-hourglass-half timer-icon"></i>
+                    <span class="font-bold text-sm">Temporizador</span>
+                </div>
+                <div class="timer-option-btn selected" onclick="window.selectTimerMode('none', this)">
+                    <i class="fa-solid fa-ban timer-icon"></i>
+                    <span class="font-bold text-sm">Sem Tempo</span>
+                </div>
+            </div>
+
+            <div id="timerInputContainer" class="hidden mb-6 bg-gray-50 p-4 rounded-xl border border-gray-200 text-center">
+                <label class="block text-xs font-bold text-gray-500 uppercase mb-2">Tempo (Minutos)</label>
+                <div class="flex items-center justify-center gap-3">
+                    <button onclick="window.adjustTime(-5)" class="w-8 h-8 rounded-full bg-white border shadow-sm text-gray-500 hover:bg-red-50 hover:text-red-500 font-bold">-5</button>
+                    <input type="number" id="inputTimerMinutes" value="25" class="w-20 text-center text-2xl font-bold bg-white border border-gray-300 rounded-lg p-2 focus:border-sky-500 outline-none">
+                    <button onclick="window.adjustTime(5)" class="w-8 h-8 rounded-full bg-white border shadow-sm text-gray-500 hover:bg-green-50 hover:text-green-500 font-bold">+5</button>
+                </div>
+            </div>
+
+            <button onclick="window.confirmTimerStart()" class="w-full bg-sky-600 hover:bg-sky-700 text-white font-bold py-3.5 rounded-xl shadow-lg transition transform hover:-translate-y-0.5">
+                Iniciar Estudos
+            </button>
+        </div>
+    </div>
+
+    <div id="deckConfigModal" class="fixed inset-0 bg-black/60 hidden z-50 flex items-center justify-center backdrop-blur-sm">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl h-[80vh] flex flex-col overflow-hidden border border-white/50">
+            <div class="bg-gray-50 px-6 py-4 border-b border-gray-200 flex justify-between items-center shrink-0">
+                <h3 class="text-lg font-bold text-gray-800" id="deckConfigTitle">Configurações</h3>
+                <button onclick="window.closeDeckConfigModal()" class="text-gray-400 hover:text-red-500"><i class="fa-solid fa-xmark text-xl"></i></button>
+            </div>
+            
+            <div class="flex border-b border-gray-200 bg-white">
+                <button class="config-tab-btn active" onclick="window.switchConfigTab('settings')"><i class="fa-solid fa-sliders mr-2"></i>Parâmetros</button>
+                <button class="config-tab-btn" onclick="window.switchConfigTab('history')"><i class="fa-solid fa-clock-rotate-left mr-2"></i>Histórico</button>
+                <button class="config-tab-btn" onclick="window.switchConfigTab('relocate')"><i class="fa-solid fa-folder-tree mr-2"></i>Mover</button>
+                <button class="config-tab-btn" onclick="window.switchConfigTab('share')"><i class="fa-solid fa-share-nodes mr-2"></i>Compartilhar</button>
+            </div>
+
+            <div class="flex-1 overflow-y-auto p-6 bg-gray-50/50">
+                <div id="tabSettingsView">
+                    <div class="bg-sky-50 p-3 rounded-lg border border-sky-100 mb-5 text-xs text-sky-800">
+                        <p class="font-bold mb-2"><i class="fa-solid fa-circle-info mr-1"></i> Entenda a Lógica:</p>
+                        <ul class="space-y-2">
+                            <li class="flex gap-2"><span class="font-bold bg-white px-1 rounded border border-sky-200 h-fit">Dias</span><span><strong>Multiplica</strong> o intervalo atual.</span></li>
+                            <li class="flex gap-2"><span class="font-bold bg-white px-1 rounded border border-sky-200 h-fit">Min</span><span>Define um <strong>Tempo Fixo</strong>.</span></li>
+                        </ul>
+                    </div>
+                    <div class="space-y-4">
+                        <div><label class="block text-xs font-bold text-gray-600 mb-1">Fácil (Bônus)</label><div class="flex gap-2"><input type="number" id="cfgEasyBonus" step="0.1" class="w-2/3 border p-2 rounded text-sm"><select id="unitEasyBonus" class="w-1/3 border p-2 rounded text-sm bg-white font-bold text-gray-600"><option value="days">Dias</option><option value="minutes">Minutos</option></select></div></div>
+                        <div><label class="block text-xs font-bold text-gray-600 mb-1">Bom (Intervalo)</label><div class="flex gap-2"><input type="number" id="cfgGoodInterval" step="0.1" class="w-2/3 border p-2 rounded text-sm"><select id="unitGoodInterval" class="w-1/3 border p-2 rounded text-sm bg-white font-bold text-gray-600"><option value="days">Dias</option><option value="minutes">Minutos</option></select></div></div>
+                        <div><label class="block text-xs font-bold text-gray-600 mb-1">Difícil</label><div class="flex gap-2"><input type="number" id="cfgHardInterval" step="0.1" class="w-2/3 border p-2 rounded text-sm"><select id="unitHardInterval" class="w-1/3 border p-2 rounded text-sm bg-white font-bold text-gray-600"><option value="days">Dias</option><option value="minutes">Minutos</option></select></div></div>
+                    </div>
+                    <button onclick="window.saveDeckConfig()" class="mt-6 bg-sky-600 text-white px-6 py-2 rounded-lg font-bold shadow-sm hover:bg-sky-700 w-full">Salvar Alterações</button>
+                </div>
+                <div id="tabHistoryView" class="hidden">
+                    <div class="overflow-hidden border border-gray-200 rounded-lg bg-white"><table class="w-full text-left text-sm"><thead class="bg-gray-100 border-b border-gray-200"><tr><th class="p-3 font-bold text-gray-600">Card</th><th class="p-3 font-bold text-gray-600 text-center">Última</th><th class="p-3 font-bold text-gray-600 text-center">Próxima</th><th class="p-3 font-bold text-gray-600 text-right">Ações</th></tr></thead><tbody id="deckHistoryBody"></tbody></table></div>
+                </div>
+                <div id="tabRelocateView" class="hidden flex flex-col h-full">
+                    <div class="bg-amber-50 p-3 rounded-lg border border-amber-100 mb-3 flex gap-2 items-start"><i class="fa-solid fa-circle-exclamation text-amber-500 mt-0.5"></i><p class="text-xs text-amber-800 leading-tight">Selecione uma <strong>Pasta</strong> de destino.</p></div>
+                    <p class="text-sm text-gray-500 mb-2 px-1">Movendo: <strong><span id="targetNameDisplay"></span></strong></p>
+                    <div class="flex-1 overflow-y-auto border border-gray-200 rounded-xl bg-white" id="folderTreeContainer"></div>
+                    <div class="mt-4 pt-4 border-t border-gray-200"><button onclick="window.confirmRelocate()" id="btnRelocateAction" class="w-full bg-sky-600 text-white px-6 py-3 rounded-xl font-bold shadow-md hover:bg-sky-700 disabled:opacity-50 disabled:cursor-not-allowed" disabled><i class="fa-solid fa-check mr-2"></i> Mover</button></div>
+                </div>
+                <div id="tabShareView" class="hidden h-full flex flex-col">
+                    <div class="bg-indigo-50 p-4 rounded-xl border border-indigo-100 mb-4">
+                        <h4 class="text-sm font-bold text-indigo-800 mb-2"><i class="fa-solid fa-user-plus mr-2"></i>Adicionar Colaborador</h4>
+                        <div class="flex flex-col gap-3">
+                            <input type="email" id="shareInputEmail" placeholder="E-mail do usuário..." class="w-full border border-gray-200 rounded-lg p-2 text-sm focus:border-indigo-400 outline-none">
+                            <div class="flex gap-2">
+                                <select id="shareInputRole" class="flex-1 border border-gray-200 rounded-lg p-2 text-sm font-bold text-gray-600 outline-none cursor-pointer">
+                                    <option value="viewer">👀 Apenas Visualizar</option>
+                                    <option value="editor">✏️ Editar e Adicionar</option>
+                                </select>
+                                <button onclick="window.shareDeckAction()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-sm transition">
+                                    Convidar
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <h4 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 mt-2">Pessoas com acesso</h4>
+                    <div class="flex-1 overflow-y-auto border border-gray-200 rounded-xl bg-white relative">
+                        <table class="w-full text-left text-sm">
+                            <thead class="bg-gray-50 border-b border-gray-100 sticky top-0">
+                                <tr>
+                                    <th class="p-3 font-bold text-gray-600">Usuário</th>
+                                    <th class="p-3 font-bold text-gray-600 text-center">Permissão</th>
+                                    <th class="p-3 font-bold text-gray-600 text-right">Ação</th>
+                                </tr>
+                            </thead>
+                            <tbody id="shareListBody">
+                                </tbody>
+                        </table>
+                        <div id="shareListEmpty" class="hidden absolute inset-0 flex flex-col items-center justify-center text-gray-400">
+                            <i class="fa-regular fa-paper-plane text-2xl mb-2 opacity-30"></i>
+                            <span class="text-xs">Ninguém convidado ainda.</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="createModal" class="fixed inset-0 bg-black/60 hidden z-50 flex items-center justify-center backdrop-blur-sm">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl h-[90vh] flex flex-col overflow-hidden border border-white/50">
+            <div class="bg-gray-50 px-6 py-4 border-b border-gray-200 flex justify-between items-center shrink-0">
+                <div class="flex items-center gap-3">
+                    <button id="btnBackToManager" onclick="window.backToManager()" class="hidden text-gray-400 hover:text-sky-600 transition" title="Voltar para Lista">
+                        <i class="fa-solid fa-arrow-left text-xl"></i>
+                    </button>
+                    <h3 id="modalTitleText" class="text-lg font-bold text-gray-800">Novo Flashcard</h3>
+                </div>
+                <button onclick="window.closeCreateModal()" class="text-gray-400 hover:text-red-500"><i class="fa-solid fa-xmark text-xl"></i></button>
+            </div>
+            <div class="flex-1 overflow-y-auto p-6 space-y-5">
+                <input type="hidden" id="inputCardId"> 
+                <div class="flex">
+                    <div id="tabModalConteudo" class="modal-cat-tab active" onclick="window.setModalCategory('conteudo')"><i class="fa-solid fa-book-open mr-1"></i> Conteúdo de Direito</div>
+                    <div id="tabModalJuris" class="modal-cat-tab" onclick="window.setModalCategory('jurisprudencia')"><i class="fa-solid fa-gavel mr-1"></i> Jurisprudência</div>
+                </div>
+                <input type="hidden" id="inputCategory">
+                <div class="bg-sky-50/50 p-4 rounded-xl border border-sky-100 grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">Localização (Pasta)</label>
+                        <div class="flex gap-2">
+                            <div id="displaySelectedFolder" class="flex-1 border border-gray-200 bg-gray-100 rounded-lg p-2.5 text-sm font-medium text-gray-600 truncate flex items-center"><i class="fa-solid fa-folder text-amber-400 mr-2"></i> <span>Início</span></div>
+                            <button onclick="window.openFolderSelectionModal()" class="bg-white hover:bg-gray-50 text-sky-600 border border-gray-200 px-3 rounded-lg text-xs font-bold transition shadow-sm" title="Alterar Pasta"><i class="fa-solid fa-folder-tree"></i></button>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">Baralho</label>
+                        <div class="relative">
+                            <input type="text" id="inputDeckNameNew" list="deckSuggestionsNew" class="w-full border border-gray-200 rounded-lg p-2.5 pl-9 focus:border-sky-400 outline-none text-sm font-bold text-gray-700 bg-white" placeholder="Nome do Baralho...">
+                            <i class="fa-solid fa-layer-group absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-300"></i>
+                            <datalist id="deckSuggestionsNew"></datalist>
+                        </div>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">Formato do Card</label>
+                    <select id="inputCardFormat" onchange="window.toggleFormatUI()" class="w-full border border-gray-200 rounded-lg p-2.5 text-sm font-bold text-gray-700 focus:border-sky-400 outline-none">
+                        <option value="basic">Tradicional (Frente/Verso)</option>
+                        <option value="cloze">Oclusão (Cloze)</option>
+                    </select>
+                </div>
+                <div>
+                    <label id="lblFrontEditor" class="block text-[10px] font-bold text-gray-400 uppercase mb-1 ml-1">Frente (Pergunta)</label>
+                    <div class="editor-toolbar" id="toolbarFront">
+                        <button class="nt-btn" onmousedown="event.preventDefault(); window.execCmd('bold')"><i class="fa-solid fa-bold"></i></button>
+                        <button class="nt-btn" onmousedown="event.preventDefault(); window.execCmd('italic')"><i class="fa-solid fa-italic"></i></button>
+                        <button class="nt-btn" onmousedown="event.preventDefault(); window.execCmd('underline')"><i class="fa-solid fa-underline"></i></button>
+                        <div class="w-px h-4 bg-gray-300 mx-1"></div>
+                        <button id="btnClozeAction" class="nt-btn text-blue-600 w-auto px-2 hidden" onmousedown="event.preventDefault(); window.wrapCloze()">[...]<span class="text-[9px] ml-1 font-bold">Cloze</span></button>
+                        <div class="w-px h-4 bg-gray-300 mx-1"></div>
+                        <button class="nt-btn" onmousedown="event.preventDefault(); window.toggleColorPopover(this, 'front')"><i class="fa-solid fa-palette text-purple-500"></i></button>
+                        <button class="nt-btn" onmousedown="event.preventDefault(); window.execCmd('removeFormat')"><i class="fa-solid fa-eraser"></i></button>
+                    </div>
+                    <div id="inputFront" class="editor-content" contenteditable="true" placeholder="Digite aqui..."></div>
+                </div>
+                <div>
+                    <label id="lblBackEditor" class="block text-[10px] font-bold text-gray-400 uppercase mb-1 ml-1">Verso (Resposta)</label>
+                    <div class="editor-toolbar" id="toolbarBack">
+                        <button class="nt-btn" onmousedown="event.preventDefault(); window.execCmd('bold')"><i class="fa-solid fa-bold"></i></button>
+                        <button class="nt-btn" onmousedown="event.preventDefault(); window.execCmd('italic')"><i class="fa-solid fa-italic"></i></button>
+                        <button class="nt-btn" onmousedown="event.preventDefault(); window.execCmd('insertUnorderedList')"><i class="fa-solid fa-list-ul"></i></button>
+                        <button class="nt-btn" onmousedown="event.preventDefault(); window.toggleColorPopover(this, 'back')"><i class="fa-solid fa-palette text-purple-500"></i></button>
+                    </div>
+                    <div id="inputBack" class="editor-content bg-sky-50/30" contenteditable="true" placeholder="Resposta..."></div>
+                </div>
+                <div class="grid grid-cols-2 gap-4 pt-2 border-t border-gray-100">
+                    <div>
+                        <label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">Fundamentação Legal</label>
+                        <input type="text" id="inputLegalBasis" class="w-full border border-gray-200 rounded-lg p-2 text-xs text-gray-700 focus:border-sky-400 outline-none" placeholder="Ex: Art. 5º, CF/88">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">Link Externo</label>
+                        <input type="url" id="inputLink" class="w-full border border-gray-200 rounded-lg p-2 text-xs text-gray-700 focus:border-sky-400 outline-none" placeholder="https://...">
+                    </div>
+                </div>
+            </div>
+            <div class="bg-gray-50 px-6 py-4 border-t border-gray-200 shrink-0">
+                <button onclick="window.saveCard()" class="w-full bg-sky-600 hover:bg-sky-700 text-white font-bold py-3 rounded-xl shadow-lg transition transform hover:-translate-y-0.5">Salvar Card</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="folderSelectionModal" class="fixed inset-0 bg-black/60 hidden z-[60] flex items-center justify-center backdrop-blur-sm">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md h-[70vh] flex flex-col overflow-hidden border border-white/50">
+            <div class="bg-gray-50 px-5 py-4 border-b border-gray-200 flex justify-between items-center shrink-0">
+                <h3 class="text-base font-bold text-gray-800">Selecionar Localização</h3>
+                <button onclick="window.closeFolderSelectionModal()" class="text-gray-400 hover:text-red-500"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            <div class="flex-1 overflow-y-auto p-4 bg-white" id="folderSelectionTreeContainer"></div>
+            <div class="p-4 border-t border-gray-200 bg-gray-50">
+                <button onclick="window.confirmFolderSelection()" id="btnConfirmFolder" class="w-full bg-sky-600 text-white px-4 py-2.5 rounded-lg font-bold shadow-sm hover:bg-sky-700 disabled:opacity-50 transition" disabled>Confirmar Seleção</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="managerModal" class="fixed inset-0 bg-black/60 hidden z-50 flex items-center justify-center backdrop-blur-sm">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl h-[85vh] flex flex-col overflow-hidden border border-white/50">
+            <div class="bg-gray-50 px-6 py-4 border-b border-gray-200 flex justify-between items-center shrink-0">
+                <h3 class="text-xl font-bold text-gray-800"><i class="fa-solid fa-list-check text-sky-600 mr-2"></i> Gerenciador</h3>
+                <button onclick="window.closeManagerModal()" class="text-gray-400 hover:text-red-500"><i class="fa-solid fa-xmark text-xl"></i></button>
+            </div>
+            <div class="flex border-b border-gray-200">
+                <button class="config-tab-btn active" onclick="window.switchManagerTab('list')"><i class="fa-solid fa-magnifying-glass mr-2"></i>Explorar Cartões</button>
+                <button class="config-tab-btn" onclick="window.switchManagerTab('io')"><i class="fa-solid fa-file-import mr-2"></i>Importar / Exportar</button>
+            </div>
+            <div id="managerTabView_List" class="flex flex-col flex-1 h-full overflow-hidden">
+                <div class="bg-white p-4 border-b border-gray-100 flex gap-3">
+                    <div class="relative flex-1">
+                        <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+                        <input type="text" id="managerSearch" oninput="window.renderManagerList()" placeholder="Buscar..." class="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:border-sky-500 outline-none">
+                    </div>
+                    <select id="managerFilterDeck" onchange="window.renderManagerList()" class="border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-600 outline-none font-bold">
+                        <option value="todos">Todos os Baralhos</option>
+                    </select>
+                </div>
+                <div class="flex-1 overflow-y-auto p-0">
+                    <table class="w-full text-left border-collapse">
+                        <thead class="bg-gray-50 sticky top-0 z-10 shadow-sm">
+                            <tr><th class="p-4 text-xs font-bold text-gray-500 uppercase w-16">#</th><th class="p-4 text-xs font-bold text-gray-500 uppercase w-32">Tipo</th><th class="p-4 text-xs font-bold text-gray-500 uppercase w-48">Baralho</th><th class="p-4 text-xs font-bold text-gray-500 uppercase">Frente</th><th class="p-4 text-xs font-bold text-gray-500 uppercase w-24 text-center">Ações</th></tr>
+                        </thead>
+                        <tbody id="managerTableBody" class="text-sm text-gray-700"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div id="managerTabView_IO" class="hidden flex-1 overflow-y-auto p-8 bg-gray-50">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8 h-full">
+                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 flex flex-col items-center text-center">
+                        <div class="w-16 h-16 bg-sky-100 rounded-full flex items-center justify-center text-sky-600 text-3xl mb-4"><i class="fa-solid fa-file-export"></i></div>
+                        <h3 class="text-lg font-bold text-gray-800 mb-2">Exportar Baralho</h3>
+                        <p class="text-sm text-gray-500 mb-6">Baixe um baralho completo como arquivo JSON.</p>
+                        <div class="w-full mb-6"><label class="block text-left text-xs font-bold text-gray-400 uppercase mb-1 ml-1">Selecionar Baralho</label><select id="exportDeckSelect" class="w-full border border-gray-200 rounded-lg p-3 text-sm font-bold text-gray-700 outline-none focus:border-sky-500 bg-gray-50"><option value="">Escolha...</option></select></div>
+                        <button onclick="window.exportDeckAction()" class="w-full bg-sky-600 hover:bg-sky-700 text-white font-bold py-3 rounded-xl shadow-lg transition"><i class="fa-solid fa-download mr-2"></i> Baixar JSON</button>
+                    </div>
+                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 flex flex-col items-center text-center">
+                        <div class="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-600 text-3xl mb-4"><i class="fa-solid fa-file-import"></i></div>
+                        <h3 class="text-lg font-bold text-gray-800 mb-2">Importar Baralho</h3>
+                        <p class="text-sm text-gray-500 mb-6">Carregue um arquivo JSON.</p>
+                        <input type="file" id="importFileInput" accept=".json" class="hidden" onchange="window.updateImportFileName()">
+                        <button onclick="document.getElementById('importFileInput').click()" class="mb-4 px-4 py-2 border border-dashed border-gray-300 rounded-lg text-sm text-gray-500 hover:bg-gray-50 hover:border-emerald-400 hover:text-emerald-600 transition w-full"><i class="fa-solid fa-upload mr-2"></i> <span id="importFileName">Selecionar Arquivo JSON...</span></button>
+                        <div class="w-full mb-4 text-left bg-gray-50 p-3 rounded-lg border border-gray-100">
+                            <label class="flex items-center gap-2 mb-2 cursor-pointer"><input type="radio" name="importMode" value="new" checked onclick="window.toggleImportMode()" class="text-emerald-600 focus:ring-emerald-500"><span class="text-sm font-bold text-gray-700">Criar Novo Baralho</span></label>
+                            <input type="text" id="importNewDeckName" class="w-full border border-gray-200 rounded p-2 text-sm mb-3 focus:border-emerald-500 outline-none" placeholder="Nome do novo baralho...">
+                            <label class="flex items-center gap-2 mb-2 cursor-pointer"><input type="radio" name="importMode" value="merge" onclick="window.toggleImportMode()" class="text-emerald-600 focus:ring-emerald-500"><span class="text-sm font-bold text-gray-700">Adicionar a Existente</span></label>
+                            <select id="importTargetDeck" class="w-full border border-gray-200 rounded p-2 text-sm bg-white disabled:opacity-50" disabled><option value="">Selecione...</option></select>
+                        </div>
+                        <button onclick="window.importDeckAction()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl shadow-lg transition"><i class="fa-solid fa-check mr-2"></i> Processar Importação</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="popover-color" class="color-popover">
+        <div class="color-swatch bg-black" onmousedown="event.preventDefault(); window.applyColor('#000000')"></div>
+        <div class="color-swatch bg-red-600" onmousedown="event.preventDefault(); window.applyColor('#dc2626')"></div>
+        <div class="color-swatch bg-blue-600" onmousedown="event.preventDefault(); window.applyColor('#2563eb')"></div>
+        <div class="color-swatch bg-green-600" onmousedown="event.preventDefault(); window.applyColor('#16a34a')"></div>
+        <div class="color-swatch bg-yellow-400" onmousedown="event.preventDefault(); window.applyColor('#facc15')"></div>
+    </div>
+
+    <script type="module" src="Flashcards.js"></script>
+    <script src="menu.js"></script>
+</body>
+</html>

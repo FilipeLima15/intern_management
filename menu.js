@@ -39,7 +39,7 @@ document.addEventListener("DOMContentLoaded", function() {
                 <a href="${links.cronograma}" class="${getBtnClass(isActive('cronograma'))}" title="Cronograma"><i class="fa-solid fa-calendar-days"></i></a>
                 <a href="${links.acompanhamento}" class="${getBtnClass(isActive('acompanhamento'))}" title="Acompanhamento"><i class="fa-solid fa-list-check"></i></a>
                 <a href="${links.jurisprudencia}" class="${getBtnClass(isActive('jurisprudencia'))}" title="Jurisprudência"><i class="fa-solid fa-gavel"></i></a>
-                <a href="anki.html" class="w-10 h-10 rounded-xl text-sky-300 hover:bg-sky-800 hover:text-white flex items-center justify-center transition" title="Flashcards (Anki)">
+                <a href="Flashcards.html" class="w-10 h-10 rounded-xl text-sky-300 hover:bg-sky-800 hover:text-white flex items-center justify-center transition" title="Flashcards (Anki)">
                 <i class="fa-solid fa-layer-group"></i>
                 </a>
                 <a href="#" id="btnChartsMenu" class="${getBtnClass(false)}" title="Gráficos"><i class="fa-solid fa-chart-pie"></i></a>
