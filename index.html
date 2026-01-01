@@ -76,6 +76,38 @@
             color: #94a3b8; cursor: pointer; transition: all 0.2s;
         }
         .close-modal-btn:hover { background-color: #f1f5f9; color: #ef4444; }
+
+        /* ESTILOS DO SISTEMA DE NOTAS (Portado de Jurisprudência) */
+        .note-tab-btn { padding: 12px 20px; font-weight: 600; color: #64748b; border-bottom: 2px solid transparent; transition: all 0.2s; }
+        .note-tab-btn:hover { color: #0284c7; background: #f0f9ff; }
+        .note-tab-btn.active { color: #0284c7; border-bottom-color: #0284c7; background: #fff; }
+
+        .note-file-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 16px; padding: 20px; }
+        .note-file-item { display: flex; flex-direction: column; align-items: center; text-align: center; cursor: pointer; padding: 10px; border-radius: 12px; transition: all 0.2s; border: 1px solid transparent; position: relative; }
+        .note-file-item:hover { background: #f0f9ff; border-color: #bae6fd; z-index: 10; }
+        .note-file-icon { font-size: 40px; margin-bottom: 8px; transition: color 0.3s; }
+        .note-file-title { font-size: 11px; font-weight: 600; color: #334155; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+
+        /* EDITOR TOOLBAR */
+        .note-toolbar { display: flex; gap: 4px; padding: 8px; background: #f1f5f9; border-bottom: 1px solid #cbd5e1; flex-wrap: wrap; align-items: center; }
+        .tool-separator { width: 1px; height: 20px; background: #cbd5e1; margin: 0 4px; }
+        .nt-btn { width: 30px; height: 30px; border-radius: 6px; border: 1px solid transparent; display: flex; align-items: center; justify-content: center; color: #475569; background: white; cursor: pointer; position: relative; }
+        .nt-btn:hover { background: #e2e8f0; color: black; }
+        
+        /* EDITOR BODY */
+        .editor-input-group { padding: 10px 20px; background: white; border-bottom: 1px solid #f1f5f9; }
+        .editor-body { flex: 1; padding: 20px; outline: none; overflow-y: auto; font-family: Arial, sans-serif; line-height: 1.6; color: #334155; min-height: 300px; }
+        .editor-body ul { list-style-type: disc; margin-left: 20px; } .editor-body ol { list-style-type: decimal; margin-left: 20px; }
+        
+        /* POPOVERS (Cores) */
+        .color-popover { position: absolute; top: 100%; left: 0; background: white; border: 1px solid #cbd5e1; padding: 8px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); z-index: 50; display: none; grid-template-columns: repeat(4, 1fr); gap: 4px; width: 140px; margin-top: 4px; }
+        .color-popover.show { display: grid; }
+        .color-swatch { width: 24px; height: 24px; border-radius: 4px; cursor: pointer; border: 1px solid #e2e8f0; }
+
+        /* PREVIEW PANEL */
+        #notePreviewPanel { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 600px; background-color: #1e293b; color: #fff; padding: 15px 20px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); z-index: 60; display: none; opacity: 0; transition: opacity 0.3s; pointer-events: none; text-align: center; }
+        #notePreviewPanel.visible { display: block; opacity: 1; }
+
     </style>
 </head>
 <body class="bg-gray-50 text-gray-800 h-screen flex overflow-hidden font-sans">
@@ -165,11 +197,11 @@
                 </div>
 
                 <div class="flex items-center justify-between mt-4 mb-6">
-    <label class="flex items-center text-sm text-slate-500 cursor-pointer">
-        <input type="checkbox" class="mr-2 rounded text-sky-600 focus:ring-sky-500"> Lembrar-me
-    </label>
-    <a href="#" id="forgotPassBtn" class="text-sm text-sky-600 hover:underline font-medium">Esqueceu a senha?</a>
-</div>
+                    <label class="flex items-center text-sm text-slate-500 cursor-pointer">
+                        <input type="checkbox" class="mr-2 rounded text-sky-600 focus:ring-sky-500"> Lembrar-me
+                    </label>
+                    <a href="#" id="forgotPassBtn" class="text-sm text-sky-600 hover:underline font-medium">Esqueceu a senha?</a>
+                </div>
 
                 <div id="loginError" class="text-red-500 text-xs text-center font-bold mb-4 min-h-[20px]"></div>
                 
@@ -261,34 +293,40 @@
             </header>
 
             <div class="flex-1 overflow-y-auto p-6 scroll-smooth">
-                <div class="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-6">
-                    <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
-                        <h4 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Status</h4>
-                        <div class="space-y-2 text-sm">
-                            <div class="flex justify-between items-center p-2 bg-green-50 rounded border border-green-100">
-                                <span class="text-green-800 font-medium">Concluído</span>
-                                <span class="bg-green-200 text-green-800 text-xs px-2 py-0.5 rounded font-bold">OK</span>
+                <div class="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-4">
+                    
+                    <div class="bg-white px-5 py-3 rounded-xl shadow-sm border border-gray-200 flex flex-col justify-center h-20">
+                        <h4 class="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Legenda</h4>
+                        <div class="flex items-center gap-3">
+                            <div class="flex items-center gap-1.5 bg-green-50 px-2 py-1 rounded border border-green-100" title="Concluído">
+                                <span class="bg-green-200 text-green-800 text-[10px] font-bold px-1.5 rounded">OK</span>
+                                <span class="text-xs font-medium text-green-800">Concluído</span>
                             </div>
-                            <div class="flex justify-between items-center p-2 bg-blue-50 rounded border border-blue-100">
-                                <span class="text-blue-800 font-medium">Não Aplicável</span>
-                                <span class="bg-blue-200 text-blue-800 text-xs px-2 py-0.5 rounded font-bold">NA</span>
+                            <div class="flex items-center gap-1.5 bg-blue-50 px-2 py-1 rounded border border-blue-100" title="Não Aplicável">
+                                <span class="bg-blue-200 text-blue-800 text-[10px] font-bold px-1.5 rounded">NA</span>
+                                <span class="text-xs font-medium text-blue-800">N/A</span>
                             </div>
                         </div>
                     </div>
-                    <div class="lg:col-span-3 bg-white p-4 rounded-xl shadow-sm border border-gray-200 flex flex-col">
-                        <div class="flex justify-between items-center mb-2">
-                            <h4 class="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-2">
-                                <i class="fa-solid fa-note-sticky text-yellow-500"></i> Anotações da Matéria
-                            </h4>
-                            <div class="flex items-center gap-3">
-                                <label class="text-xs text-gray-500 flex items-center gap-1 cursor-pointer select-none">
-                                    <input type="checkbox" id="notesMarkdown" class="rounded text-sky-600"> Markdown
-                                </label>
-                                <button id="notesClear" class="text-xs text-red-400 hover:text-red-600">Limpar</button>
+                    
+                    <div class="lg:col-span-3 bg-white px-6 rounded-xl shadow-sm border border-gray-200 flex items-center justify-between relative overflow-hidden group h-20">
+                        <div class="absolute right-0 top-0 h-full w-32 bg-gradient-to-l from-yellow-50 to-transparent opacity-60"></div>
+
+                        <div class="flex items-center gap-4 relative z-10">
+                            <div class="w-10 h-10 bg-yellow-100 text-yellow-600 rounded-lg flex items-center justify-center text-lg shadow-sm">
+                                <i class="fa-regular fa-folder-open"></i>
+                            </div>
+                            <div>
+                                <h3 class="text-sm font-bold text-gray-800">Anotações Digitais</h3>
+                                <p class="text-xs text-gray-500 hidden sm:block">Acesse seus resumos e anotações desta disciplina.</p>
                             </div>
                         </div>
-                        <div id="notesBox" contenteditable="true" class="notes-box flex-1 focus:outline-none"></div>
-                        <div id="notesPreview" class="hidden p-3 bg-gray-50 rounded border mt-2 text-sm prose"></div>
+                        
+                        <div class="relative z-10">
+                            <button onclick="window.openNotesForSubject()" class="bg-yellow-500 hover:bg-yellow-600 text-white px-5 py-2 rounded-lg text-xs font-bold shadow-sm hover:shadow transition transform hover:-translate-y-0.5 flex items-center gap-2">
+                                <i class="fa-solid fa-book-open"></i> <span class="hidden sm:inline">Abrir Caderno</span>
+                            </button>
+                        </div>
                     </div>
                 </div>
 
@@ -301,11 +339,190 @@
         </main>
     </div>
 
+    <div id="noteModal" class="fixed inset-0 bg-black/60 hidden z-50 flex items-center justify-center backdrop-blur-sm transition-all">
+        <div class="bg-white rounded-3xl shadow-2xl w-full max-w-4xl h-[85vh] overflow-hidden flex flex-col border border-white/50 relative animate-fade-in">
+            <div class="bg-gray-50 px-6 pt-4 pb-0 border-b border-gray-200 flex justify-between items-start shrink-0">
+                <div class="w-full">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 id="noteModalTitle" class="text-xl font-bold text-gray-800 flex items-center gap-2">
+                            <i class="fa-regular fa-folder-open text-yellow-500"></i> Caderno Digital
+                        </h3>
+                        <button onclick="window.closeNoteModal()" class="text-gray-400 hover:text-red-500 transition w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100"><i class="fa-solid fa-xmark text-xl"></i></button>
+                    </div>
+                    <div class="flex gap-6">
+                        <button id="tabListBtn" onclick="window.switchNoteTab('list')" class="note-tab-btn active"><i class="fa-solid fa-layer-group mr-2"></i>Meus Arquivos</button>
+                        <button id="tabEditorBtn" onclick="window.switchNoteTab('editor')" class="note-tab-btn"><i class="fa-solid fa-pen-to-square mr-2"></i>Editor</button>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="flex-1 bg-white overflow-hidden relative">
+                <div id="viewList" class="absolute inset-0 overflow-y-auto p-6">
+                    <div id="filterContainer" class="flex justify-end items-center gap-2 mb-4 hidden">
+                         <div class="relative">
+                            <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 text-xs"></i>
+                            <input id="internalSearch" type="text" placeholder="Buscar nas notas..." class="bg-white border border-gray-200 text-gray-600 text-xs pl-8 pr-3 py-2 rounded-lg outline-none focus:border-sky-500 shadow-sm w-40 transition" oninput="window.renderNoteList()">
+                         </div>
+                         
+                         <div class="w-px h-6 bg-gray-200 mx-1"></div>
+                         <select id="filterNoteImportance" onchange="window.renderNoteList()" class="bg-white border border-gray-200 text-gray-600 text-xs font-bold rounded-lg p-2 outline-none focus:border-sky-500 shadow-sm cursor-pointer">
+                            <option value="todos">Qualquer Importância</option>
+                            <option value="Alta">Alta</option>
+                            <option value="Média">Média</option>
+                            <option value="Baixa">Baixa</option>
+                            <option value="Normal">Normal</option>
+                         </select>
+
+                         <select id="filterNoteSubject" onchange="window.renderNoteList()" class="bg-white border border-gray-200 text-gray-600 text-xs font-bold rounded-lg p-2 outline-none focus:border-sky-500 shadow-sm cursor-pointer" style="max-width: 150px;">
+                            <option value="todos">Todas as Matérias</option>
+                         </select>
+                    </div>
+
+                    <div id="notesContainer" class="space-y-6 pb-20"></div> 
+                    <div id="emptyStateList" class="hidden flex flex-col items-center justify-center h-full text-gray-400">
+                        <i class="fa-regular fa-file-lines text-6xl mb-4 opacity-30"></i>
+                        <p>Nenhuma anotação criada para esta matéria.</p>
+                        <button onclick="window.startNewNote()" class="mt-4 text-sky-600 hover:underline font-bold">Criar primeira nota</button>
+                    </div>
+                </div>
+
+                <div id="notePreviewPanel">
+                    <h5 id="previewTitle" class="text-sky-300 font-bold text-xs uppercase mb-1"></h5>
+                    <p id="previewContent" class="text-gray-200 text-sm line-clamp-3"></p>
+                </div>
+
+                <div id="viewEditor" class="absolute inset-0 flex flex-col hidden bg-white">
+                    <div class="editor-input-group flex flex-col gap-4 bg-gray-50/50 p-6 border-b border-gray-200">
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                            <div class="md:col-span-3">
+                                <label class="block text-[10px] font-bold text-gray-400 uppercase mb-1 ml-1">Título da Anotação</label>
+                                <input type="text" id="noteTitleInput" class="w-full border border-gray-200 rounded-lg p-3 text-sm font-bold text-gray-800 focus:outline-none focus:border-sky-400 bg-white shadow-sm placeholder-gray-300" placeholder="Ex: Resumo Aula 01...">
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-bold text-gray-400 uppercase mb-1 ml-1">Importância</label>
+                                <select id="noteImportanceInput" class="w-full border border-gray-200 rounded-lg p-3 text-xs font-bold text-gray-600 focus:outline-none focus:border-sky-400 bg-white shadow-sm uppercase">
+                                    <option value="">Normal</option>
+                                    <option value="Alta" class="text-red-600 font-bold">Alta</option>
+                                    <option value="Média" class="text-orange-500 font-bold">Média</option>
+                                    <option value="Baixa" class="text-green-600 font-bold">Baixa</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="note-toolbar">
+                        <button class="nt-btn" onmousedown="event.preventDefault(); document.execCommand('bold')" title="Negrito"><i class="fa-solid fa-bold"></i></button>
+                        <button class="nt-btn" onmousedown="event.preventDefault(); document.execCommand('italic')" title="Itálico"><i class="fa-solid fa-italic"></i></button>
+                        <button class="nt-btn" onmousedown="event.preventDefault(); document.execCommand('underline')" title="Sublinhado"><i class="fa-solid fa-underline"></i></button>
+                        <button class="nt-btn" onmousedown="event.preventDefault(); document.execCommand('strikeThrough')" title="Tachado"><i class="fa-solid fa-strikethrough"></i></button>
+                        
+                        <div class="tool-separator"></div>
+
+                        <button class="nt-btn" onmousedown="event.preventDefault(); document.execCommand('justifyLeft')" title="Esquerda"><i class="fa-solid fa-align-left"></i></button>
+                        <button class="nt-btn" onmousedown="event.preventDefault(); document.execCommand('justifyCenter')" title="Centralizar"><i class="fa-solid fa-align-center"></i></button>
+                        <button class="nt-btn" onmousedown="event.preventDefault(); document.execCommand('justifyRight')" title="Direita"><i class="fa-solid fa-align-right"></i></button>
+                        <button class="nt-btn" onmousedown="event.preventDefault(); document.execCommand('justifyFull')" title="Justificado"><i class="fa-solid fa-align-justify"></i></button>
+
+                        <div class="tool-separator"></div>
+
+                        <button class="nt-btn" onmousedown="event.preventDefault(); document.execCommand('insertUnorderedList')" title="Lista com Marcadores"><i class="fa-solid fa-list-ul"></i></button>
+                        <button class="nt-btn" onmousedown="event.preventDefault(); document.execCommand('insertOrderedList')" title="Lista Numerada"><i class="fa-solid fa-list-ol"></i></button>
+
+                        <div class="tool-separator"></div>
+
+                        <button class="nt-btn" onmousedown="event.preventDefault(); document.execCommand('outdent')" title="Diminuir Recuo"><i class="fa-solid fa-outdent"></i></button>
+                        <button class="nt-btn" onmousedown="event.preventDefault(); document.execCommand('indent')" title="Aumentar Recuo (Bloco)"><i class="fa-solid fa-indent"></i></button>
+                        <button class="nt-btn" onmousedown="event.preventDefault(); window.insertParagraphIndent()" title="Inserir Parágrafo (1ª Linha)"><i class="fa-solid fa-paragraph"></i></button>
+                        <button class="nt-btn" onmousedown="event.preventDefault(); window.insertTable()" title="Inserir Tabela"><i class="fa-solid fa-table"></i></button>
+                        
+                        <div class="tool-separator"></div>
+                        
+                        <div class="relative">
+                            <button class="nt-btn" onmousedown="event.preventDefault(); window.toggleColorPopover('foreColor')" title="Cor do Texto"><i class="fa-solid fa-font text-red-500"></i></button>
+                            <div id="popover-foreColor" class="color-popover">
+                                <div class="color-swatch bg-black" onmousedown="event.preventDefault(); window.applyColor('foreColor', '#000000')"></div>
+                                <div class="color-swatch bg-red-600" onmousedown="event.preventDefault(); window.applyColor('foreColor', '#dc2626')"></div>
+                                <div class="color-swatch bg-blue-600" onmousedown="event.preventDefault(); window.applyColor('foreColor', '#2563eb')"></div>
+                                <div class="color-swatch bg-green-600" onmousedown="event.preventDefault(); window.applyColor('foreColor', '#16a34a')"></div>
+                                <label class="color-swatch flex items-center justify-center bg-gray-100 border border-gray-300 cursor-pointer" onmousedown="event.preventDefault()">
+                                    <i class="fa-solid fa-plus text-[10px]"></i>
+                                    <input type="color" class="opacity-0 absolute inset-0 w-full h-full cursor-pointer" oninput="window.applyColor('foreColor', this.value)">
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="relative">
+                            <button class="nt-btn" onmousedown="event.preventDefault(); window.toggleColorPopover('hiliteColor')" title="Marca Texto"><i class="fa-solid fa-highlighter text-yellow-400"></i></button>
+                            <div id="popover-hiliteColor" class="color-popover">
+                                <div class="color-swatch bg-yellow-200" onmousedown="event.preventDefault(); window.applyColor('hiliteColor', '#fef08a')"></div>
+                                <div class="color-swatch bg-green-200" onmousedown="event.preventDefault(); window.applyColor('hiliteColor', '#bbf7d0')"></div>
+                                <div class="color-swatch bg-pink-200" onmousedown="event.preventDefault(); window.applyColor('hiliteColor', '#fbcfe8')"></div>
+                                <div class="color-swatch bg-blue-200" onmousedown="event.preventDefault(); window.applyColor('hiliteColor', '#bfdbfe')"></div>
+                                <div class="color-swatch bg-white border border-gray-300 relative flex items-center justify-center" onmousedown="event.preventDefault(); window.applyColor('hiliteColor', 'transparent')" title="Sem cor"><i class="fa-solid fa-ban text-[10px] text-red-500"></i></div>
+                            </div>
+                        </div>
+
+                        <div class="tool-separator"></div>
+
+                        <div class="relative">
+                            <button class="nt-btn w-auto px-2 gap-1" onmousedown="event.preventDefault(); window.toggleColorPopover('fontSize')" title="Tamanho da Fonte">
+                                <i class="fa-solid fa-text-height"></i> <i class="fa-solid fa-caret-down text-[10px]"></i>
+                            </button>
+                            <div id="popover-fontSize" class="color-popover" style="width: 100px; grid-template-columns: 1fr; max-height: 200px; overflow-y: auto;">
+                                <button class="w-full text-left px-2 py-1 text-xs hover:bg-gray-100 font-bold" onmousedown="event.preventDefault(); window.applyColor('fontSize', '1')">1. Pequeno</button>
+                                <button class="w-full text-left px-2 py-1 text-xs hover:bg-gray-100 font-bold" onmousedown="event.preventDefault(); window.applyColor('fontSize', '2')">2. Normal -</button>
+                                <button class="w-full text-left px-2 py-1 text-xs hover:bg-gray-100 font-bold bg-gray-50" onmousedown="event.preventDefault(); window.applyColor('fontSize', '3')">3. Normal (Padrão)</button>
+                                <button class="w-full text-left px-2 py-1 text-xs hover:bg-gray-100 font-bold" onmousedown="event.preventDefault(); window.applyColor('fontSize', '4')">4. Médio</button>
+                                <button class="w-full text-left px-2 py-1 text-xs hover:bg-gray-100 font-bold" onmousedown="event.preventDefault(); window.applyColor('fontSize', '5')">5. Grande</button>
+                                <button class="w-full text-left px-2 py-1 text-xs hover:bg-gray-100 font-bold" onmousedown="event.preventDefault(); window.applyColor('fontSize', '6')">6. Muito Grande</button>
+                                <button class="w-full text-left px-2 py-1 text-xs hover:bg-gray-100 font-bold" onmousedown="event.preventDefault(); window.applyColor('fontSize', '7')">7. Enorme</button>
+                            </div>
+                        </div>
+
+                        <div class="tool-separator"></div>
+                        <div class="relative">
+                            <button class="nt-btn w-auto px-2 gap-1 text-purple-600" onmousedown="event.preventDefault(); window.toggleColorPopover('templates')" title="Inserir Modelo Rápido">
+                                <i class="fa-solid fa-wand-magic-sparkles"></i>
+                            </button>
+                            <div id="popover-templates" class="color-popover" style="width: 160px; grid-template-columns: 1fr;">
+                                <button class="w-full text-left px-2 py-2 text-xs hover:bg-purple-50 font-bold border-b border-gray-100" onmousedown="event.preventDefault(); window.insertTemplate('thesis')">
+                                    <i class="fa-solid fa-scale-balanced mr-2 text-purple-500"></i> Tese Fixada
+                                </button>
+                                <button class="w-full text-left px-2 py-2 text-xs hover:bg-purple-50 font-bold border-b border-gray-100" onmousedown="event.preventDefault(); window.insertTemplate('acordao')">
+                                    <i class="fa-solid fa-gavel mr-2 text-purple-500"></i> Estrutura Acórdão
+                                </button>
+                                <button class="w-full text-left px-2 py-2 text-xs hover:bg-purple-50 font-bold" onmousedown="event.preventDefault(); window.insertTemplate('resumo')">
+                                    <i class="fa-solid fa-list-check mr-2 text-purple-500"></i> Resumo Aula
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="tool-separator"></div>
+                        <button class="nt-btn" onmousedown="event.preventDefault(); document.execCommand('removeFormat')" title="Limpar Formatação"><i class="fa-solid fa-eraser"></i></button>
+                    </div>
+
+                    <div id="noteContent" class="editor-body min-h-0" contenteditable="true" placeholder="Comece a digitar..."></div>
+                    
+                    <div class="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-between items-center shrink-0 rounded-b-3xl">
+                        <div class="flex gap-2 items-center">
+                            <button onclick="window.deleteCurrentNote()" id="btnDeleteNote" class="px-4 py-2 text-red-500 hover:bg-red-50 rounded-lg text-sm font-bold hidden transition"><i class="fa-solid fa-trash mr-1"></i> Excluir</button>
+                            <span id="lastEditedDisplay" class="text-[10px] text-gray-400 font-bold ml-2"></span>
+                        </div>
+                        <div class="flex gap-2">
+                            <button onclick="window.startNewNote()" class="px-4 py-2 text-sky-600 hover:bg-sky-50 rounded-lg text-sm font-bold border border-sky-200 transition"><i class="fa-solid fa-plus mr-1"></i> Nova</button>
+                            <button onclick="window.switchNoteTab('list')" class="px-4 py-2 text-gray-500 hover:bg-gray-200 rounded-lg text-sm font-bold transition">Voltar</button>
+                            <button onclick="window.saveCurrentNote()" class="px-6 py-2 bg-sky-600 text-white hover:bg-sky-700 rounded-lg text-sm font-bold shadow-md transition transform hover:-translate-y-0.5">Salvar</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="menu.js"></script> 
     <script type="module" src="firebase-config.js"></script>
     <script type="module" src="auth.js"></script>
     <script type="module" src="script.js"></script>
-    </body>
 
     <script>
         // --- SCRIPT PARA CONTROLAR O MODAL (LOCAL) ---

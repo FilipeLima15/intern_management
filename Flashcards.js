@@ -10,8 +10,149 @@ let studyQueue = [];
 let currentCardIndex = 0;
 let currentDeckName = null;
 let currentCategoryFilter = 'conteudo';
-let currentPathStack = []; 
+let currentPathStack = [];
+let initialSessionLength = 0;
 
+// --- VARIÁVEIS PARA GERENCIADOR (AÇÕES EM MASSA) ---
+let selectedManagerCards = new Set();
+let isBatchMoveMode = false; // Flag para saber se estamos movendo em lote
+
+// --- FUNÇÕES DE SELEÇÃO DO GERENCIADOR ---
+
+window.toggleManagerCardSelection = function(id) {
+    if (selectedManagerCards.has(id)) {
+        selectedManagerCards.delete(id);
+    } else {
+        selectedManagerCards.add(id);
+    }
+    updateManagerToolbar();
+};
+
+window.toggleSelectAllManager = function() {
+    const checkboxes = document.querySelectorAll('.manager-card-checkbox');
+    const masterCheck = document.getElementById('managerSelectAll');
+    const isChecked = masterCheck.checked;
+
+    checkboxes.forEach(cb => {
+        cb.checked = isChecked;
+        if (isChecked) selectedManagerCards.add(cb.dataset.id);
+        else selectedManagerCards.delete(cb.dataset.id);
+    });
+    updateManagerToolbar();
+};
+
+window.clearManagerSelection = function() {
+    selectedManagerCards.clear();
+    document.getElementById('managerSelectAll').checked = false;
+    document.querySelectorAll('.manager-card-checkbox').forEach(cb => cb.checked = false);
+    updateManagerToolbar();
+};
+
+window.updateManagerToolbar = function() {
+    const toolbar = document.getElementById('managerBatchToolbar');
+    const countSpan = document.getElementById('batchCount');
+    const count = selectedManagerCards.size;
+
+    countSpan.innerText = count;
+    
+    if (count > 0) {
+        toolbar.classList.remove('hidden');
+    } else {
+        toolbar.classList.add('hidden');
+    }
+};
+
+// --- AÇÕES EM LOTE ---
+
+window.batchDeleteCards = async function() {
+    const count = selectedManagerCards.size;
+    if (count === 0) return;
+
+    if (!confirm(`Tem certeza que deseja EXCLUIR ${count} cartões selecionados?\nEssa ação não pode ser desfeita.`)) return;
+
+    const updates = {};
+    selectedManagerCards.forEach(id => {
+        updates[`users/${currentUserUID}/anki/cards/${id}`] = null;
+        delete allCards[id]; // Atualiza localmente
+    });
+
+    try {
+        await update(ref(db), updates);
+        alert(`${count} cartões excluídos.`);
+        window.clearManagerSelection();
+        window.renderManagerList();
+    } catch (e) {
+        console.error(e);
+        alert("Erro ao excluir cartões.");
+    }
+};
+
+window.batchMoveCards = function() {
+    const count = selectedManagerCards.size;
+    if (count === 0) return;
+    
+    // Abre o modal de seleção de pasta existente, mas com flag de batch
+    isBatchMoveMode = true;
+    window.openFolderSelectionModal();
+    // Muda o título do modal visualmente para indicar contexto
+    document.querySelector('#folderSelectionModal h3').innerText = `Mover ${count} itens para...`;
+};
+
+// ATUALIZAÇÃO DA FUNÇÃO confirmFolderSelection PARA SUPORTAR BATCH MOVE
+// Substitua ou atualize sua função window.confirmFolderSelection existente por esta:
+window.confirmFolderSelection = async function() {
+    const pathName = selectedCreateFolder === "" ? "Início" : selectedCreateFolder;
+    
+    // Se for modo Batch Move (Gerenciador)
+    if (isBatchMoveMode) {
+        if (!confirm(`Mover ${selectedManagerCards.size} cartões para "${pathName}"?`)) return;
+        
+        const updates = {};
+        // Se a pasta for "Início", o deck é apenas o nome do card original? Não, precisa manter a estrutura ou achatar?
+        // Vamos simplificar: Move tudo para a pasta selecionada como se fosse um deck "Geral" dentro dela,
+        // OU, melhor para concurseiro: Mantém o nome do baralho original, mas muda a pasta pai?
+        // IMPLEMENTAÇÃO ATUAL: Move para um deck chamado "Geral" dentro da pasta alvo, ou apenas muda o prefixo.
+        // PARA SIMPLIFICAR: Vamos mover todos para um deck chamado "Geral" dentro da pasta escolhida, 
+        // ou se a pasta escolhida já for um deck, move para ele.
+        
+        // Estratégia Segura: Move para "PastaSelecionada::Geral" se for pasta pura, ou "PastaSelecionada" se for deck.
+        // Mas como só temos o path, vamos mover para "PastaSelecionada::Desarquivados" ou apenas "PastaSelecionada".
+        // Vamos usar o path selecionado como o novo deck base.
+        
+        selectedManagerCards.forEach(id => {
+            const card = allCards[id];
+            // Se o usuário selecionou "Direito Civil", o card vai para "Direito Civil"
+            // Se ele tinha um subdeck, infelizmente nesta versão simples ele perde o subdeck e vai pro pai.
+            // Para manter hierarquia seria complexo. Vamos mover direto para o alvo.
+            updates[`users/${currentUserUID}/anki/cards/${id}/deck`] = pathName;
+            
+            if (allCards[id]) allCards[id].deck = pathName;
+        });
+
+        try {
+            await update(ref(db), updates);
+            alert("Cartões movidos com sucesso!");
+            isBatchMoveMode = false;
+            window.closeFolderSelectionModal();
+            window.clearManagerSelection();
+            window.renderManagerList();
+            
+            // Restaura título original
+            document.querySelector('#folderSelectionModal h3').innerText = "Selecionar Localização";
+        } catch (e) {
+            console.error(e);
+            alert("Erro ao mover em lote.");
+        }
+        return;
+    }
+
+    // Comportamento original (Criar Card)
+    const display = document.getElementById('displaySelectedFolder');
+    display.innerHTML = `<i class="fa-solid fa-folder text-amber-400 mr-2"></i> <span>${pathName}</span>`;
+    
+    window.updateDeckSuggestions();
+    window.closeFolderSelectionModal();
+};
 
 
 // Variáveis de Estado
@@ -90,6 +231,21 @@ console.log("🧠 Iniciando Anki Expert (Versão Final com Busca)...");
 
 // --- COMPARTILHAMENTO ---
 
+// --- ATUALIZA A LEGENDA DO CARGO (UX MELHORADA) ---
+window.updateRoleDescription = function() {
+    const role = document.getElementById('shareInputRole').value;
+    const desc = document.getElementById('roleDescriptionText');
+    if(!desc) return;
+
+    if (role === 'viewer') {
+        desc.innerHTML = '<i class="fa-solid fa-circle-info mr-1"></i> O usuário poderá apenas <strong>estudar</strong> os cards. Seu progresso será individual.';
+        desc.className = "text-[10px] text-indigo-500 font-medium ml-1 animate-fade-in";
+    } else {
+        desc.innerHTML = '<i class="fa-solid fa-triangle-exclamation mr-1"></i> CUIDADO: O usuário poderá <strong>editar, adicionar e excluir</strong> cards deste baralho.';
+        desc.className = "text-[10px] text-amber-600 font-medium ml-1 animate-fade-in";
+    }
+};
+
 // 1. Ação do Botão "Convidar"
 window.shareDeckAction = async function() {
     const email = document.getElementById('shareInputEmail').value.trim();
@@ -132,11 +288,14 @@ window.shareDeckAction = async function() {
     }
 };
 
-// 2. Listar quem tem acesso (No Modal)
+// 2. Listar quem tem acesso (No Modal - VERSÃO VISUAL MODERNA)
 window.renderSharedUsers = async function() {
-    const tbody = document.getElementById('shareListBody');
+    const container = document.getElementById('shareListContainer'); // <--- Note que agora buscamos o Container, não o Body da tabela
     const empty = document.getElementById('shareListEmpty');
-    tbody.innerHTML = '';
+    const badge = document.getElementById('shareCountBadge');
+    
+    // Limpa conteúdo anterior
+    if(container) container.innerHTML = '';
     
     if (!currentDeckName) return;
 
@@ -146,29 +305,50 @@ window.renderSharedUsers = async function() {
         const snap = await get(ref(db, `users/${currentUserUID}/anki/shared_out/${deckKey}`));
         
         if (!snap.exists()) {
-            empty.classList.remove('hidden');
+            if(empty) empty.classList.remove('hidden');
+            if(badge) badge.innerText = "0";
             return;
         }
         
-        empty.classList.add('hidden');
+        if(empty) empty.classList.add('hidden');
         const users = snap.val();
+        const userList = Object.values(users);
+        
+        if(badge) badge.innerText = userList.length;
 
-        Object.values(users).forEach(user => {
-            const tr = document.createElement('tr');
-            tr.className = "border-b border-gray-50";
+        userList.forEach(user => {
+            // Cria um card (DIV) para o usuário em vez de uma linha de tabela (TR)
+            const item = document.createElement('div');
+            item.className = "flex items-center justify-between p-3 rounded-lg border border-gray-100 hover:border-indigo-100 hover:bg-indigo-50/30 transition group";
             
-            const roleLabel = user.role === 'editor' ? 'Editor' : 'Visualizador';
+            const roleBadge = user.role === 'editor' 
+                ? '<span class="text-[9px] font-bold bg-amber-100 text-amber-700 px-2 py-1 rounded-md uppercase tracking-wide border border-amber-200">Editor</span>' 
+                : '<span class="text-[9px] font-bold bg-indigo-100 text-indigo-700 px-2 py-1 rounded-md uppercase tracking-wide border border-indigo-200">Leitor</span>';
             
-            tr.innerHTML = `
-                <td class="p-3 text-gray-700 font-bold">${user.email}</td>
-                <td class="p-3 text-center text-xs uppercase text-gray-500">${roleLabel}</td>
-                <td class="p-3 text-right">
-                    <button onclick="window.unshareDeckAction('${user.inviteId}', '${encodeEmail(user.email)}', '${deckKey}')" class="text-red-400 hover:text-red-600 text-xs font-bold border border-red-100 hover:bg-red-50 px-2 py-1 rounded">
-                        Remover
-                    </button>
-                </td>
+            // Iniciais do Nome (Avatar)
+            const initial = user.email.charAt(0).toUpperCase();
+            
+            item.innerHTML = `
+                <div class="flex items-center gap-3">
+                    <div class="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-xs font-bold shadow-sm">
+                        ${initial}
+                    </div>
+                    <div class="flex flex-col">
+                        <span class="text-sm font-bold text-gray-700 leading-tight">${user.email}</span>
+                        <div class="flex items-center gap-2 mt-0.5">
+                            ${roleBadge}
+                            <span class="text-[9px] text-gray-400">Adicionado recentemente</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <button onclick="window.unshareDeckAction('${user.inviteId}', '${encodeEmail(user.email)}', '${deckKey}')" 
+                    class="w-8 h-8 rounded-full text-gray-300 hover:text-red-500 hover:bg-red-50 transition flex items-center justify-center" 
+                    title="Remover Acesso">
+                    <i class="fa-solid fa-user-xmark"></i>
+                </button>
             `;
-            tbody.appendChild(tr);
+            container.appendChild(item);
         });
 
     } catch (e) { console.error(e); }
@@ -603,9 +783,9 @@ async function executeMove(oldPrefix, newPrefix) {
 }
 
 
-// --- RENDERIZAÇÃO GRID (COM SEÇÕES SEPARADAS + FILTRO) ---
+// --- RENDERIZAÇÃO GRID (LAYOUT UNIFICADO E CLEAN) ---
 function renderDecksView() {
-    // --- LÓGICA ESPECIAL PARA ABA COMPARTILHADOS (NÃO MEXER) ---
+    // --- LÓGICA PARA ABA COMPARTILHADOS ---
     if (currentCategoryFilter === 'shared') {
         const container = document.getElementById('containerDecks');
         const empty = document.getElementById('viewDecksEmptyState');
@@ -629,35 +809,74 @@ function renderDecksView() {
                 const cardEl = document.createElement('div');
                 const totalDue = deck.newCount + deck.dueCount;
                 const isDue = totalDue > 0;
+                
+                // Status Border (Igual ao dono)
                 const statusBorder = isDue ? 'border-l-4 border-l-sky-500' : 'border-l-4 border-l-gray-200';
                 
-                cardEl.className = `bg-white rounded-2xl p-5 shadow-sm border border-gray-100 hover:shadow-lg transition flex flex-col justify-between h-40 group relative overflow-hidden ${statusBorder}`;
+                cardEl.className = `bg-white rounded-xl p-4 shadow-sm border border-gray-200 hover:shadow-md hover:border-sky-300 transition flex flex-col justify-between h-40 group relative overflow-hidden ${statusBorder}`;
                 
                 let lastRevText = "Nunca";
                 if (deck.lastReview > 0) lastRevText = new Date(deck.lastReview).toLocaleDateString('pt-BR');
 
                 const roleBadge = deck.role === 'editor' 
-                    ? '<span class="bg-indigo-100 text-indigo-700 text-[9px] px-2 py-1 rounded font-bold uppercase">Editor</span>'
-                    : '<span class="bg-gray-100 text-gray-500 text-[9px] px-2 py-1 rounded font-bold uppercase">Visualizador</span>';
+                    ? '<span class="bg-indigo-100 text-indigo-700 text-[9px] px-2 py-0.5 rounded font-bold uppercase border border-indigo-200">Editor</span>'
+                    : '<span class="bg-gray-100 text-gray-500 text-[9px] px-2 py-0.5 rounded font-bold uppercase border border-gray-200">Visualizador</span>';
 
-                const removeBtn = `<div class="deck-actions z-30"><button class="btn-deck-action del" onclick="window.unshareDeckAction('${deck.inviteId}', '${encodeEmail(auth.currentUser.email)}', '${btoa(unescape(encodeURIComponent(deck.deckPath))).replace(/=/g,'')}')" title="Remover Acesso"><i class="fa-solid fa-trash"></i></button></div>`;
+                // Botão de lixeira (Posicionado no topo direito, igual às ações do dono)
+                const removeBtn = `<div class="deck-actions z-30 absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity"><button class="text-gray-300 hover:text-red-500 transition" onclick="window.unshareDeckAction('${deck.inviteId}', '${encodeEmail(auth.currentUser.email)}', '${btoa(unescape(encodeURIComponent(deck.deckPath))).replace(/=/g,'')}')" title="Remover Acesso"><i class="fa-solid fa-trash"></i></button></div>`;
                 
+                // CÁLCULO DE PROGRESSO
+                const totalCards = deck.cardCount || 1;
+                const learnedCards = deck.cardCount - deck.newCount;
+                const progressPercent = Math.round((learnedCards / totalCards) * 100);
+                
+                let barColor = 'bg-sky-500';
+                if(progressPercent >= 100) barColor = 'bg-emerald-500';
+                else if(progressPercent < 20) barColor = 'bg-gray-300';
+
                 cardEl.innerHTML = `
                     ${removeBtn}
-                    <div onclick="window.prepareSharedSession('${deck.ownerUid}', '${deck.deckPath}', '${deck.role}', ${totalDue})" class="cursor-pointer h-full flex flex-col justify-between">
-                        <div class="mt-4"> <div class="flex justify-between items-start">
-                                <h3 class="font-bold text-gray-800 text-lg group-hover:text-sky-600 transition truncate pr-2">${deck.deckPath.split('::').pop()}</h3>
+                    <div onclick="window.prepareSharedSession('${deck.ownerUid}', '${deck.deckPath}', '${deck.role}', ${totalDue})" class="cursor-pointer h-full flex flex-col justify-between relative z-10">
+                        
+                        <div>
+                            <div class="pr-6 flex justify-between items-start gap-2">
+                                <h3 class="font-bold text-gray-800 text-base leading-tight group-hover:text-sky-600 transition truncate" title="${deck.deckPath.split('::').pop()}">${deck.deckPath.split('::').pop()}</h3>
                                 ${roleBadge}
                             </div>
-                            <p class="text-[10px] text-gray-400 font-bold uppercase mt-1"><i class="fa-solid fa-user mr-1"></i> ${deck.ownerEmail || 'Usuário'}</p>
-                            <p class="text-[9px] text-gray-400 italic mt-0.5">Visto: ${lastRevText}</p>
-                        </div>
-                        <div class="flex items-end justify-between mt-1">
-                            <div class="flex gap-4">
-                                <div><span class="text-xl font-extrabold text-green-500">${deck.newCount}</span><span class="text-[9px] font-bold text-gray-400 uppercase block leading-none">Novos</span></div>
-                                <div><span class="text-xl font-extrabold text-sky-600">${deck.dueCount}</span><span class="text-[9px] font-bold text-gray-400 uppercase block leading-none">Rev</span></div>
+                            <div class="mt-1">
+                                <p class="text-[10px] text-gray-400 font-bold uppercase truncate max-w-[90%]"><i class="fa-solid fa-user-circle mr-1"></i> ${deck.ownerEmail || 'Usuário'}</p>
+                                <p class="text-[10px] text-gray-400 font-medium mt-0.5"><i class="fa-regular fa-clock mr-1"></i> ${lastRevText === 'Nunca' ? 'Nunca estudado' : lastRevText}</p>
                             </div>
-                            <div class="w-8 h-8 rounded-full ${isDue ? 'bg-sky-100 text-sky-600' : 'bg-gray-100 text-gray-300'} flex items-center justify-center shadow-sm"><i class="fa-solid fa-play ml-0.5 text-xs"></i></div>
+                        </div>
+
+                        <div class="w-full mt-2 mb-1">
+                            <div class="flex justify-between text-[9px] font-bold text-gray-400 mb-1 uppercase tracking-wider">
+                                <span>Domínio</span>
+                                <span>${progressPercent}%</span>
+                            </div>
+                            <div class="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden">
+                                <div class="h-full ${barColor} transition-all duration-700" style="width: ${progressPercent}%"></div>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center justify-between pt-2 border-t border-gray-50">
+                            <div class="flex gap-4">
+                                <div class="flex flex-col items-center">
+                                    <span class="text-base font-bold text-green-500">${deck.newCount}</span>
+                                    <span class="text-[10px] font-bold text-gray-400 uppercase leading-none">Novos</span>
+                                </div>
+                                <div class="flex flex-col items-center">
+                                    <span class="text-base font-bold text-sky-600">${deck.dueCount}</span>
+                                    <span class="text-[10px] font-bold text-gray-400 uppercase leading-none">Rev</span>
+                                </div>
+                                <div class="flex flex-col items-center">
+                                    <span class="text-base font-bold text-gray-400">${deck.cardCount}</span>
+                                    <span class="text-[10px] font-bold text-gray-300 uppercase leading-none">Total</span>
+                                </div>
+                            </div>
+                            <div class="w-8 h-8 rounded-full ${isDue ? 'bg-sky-600 text-white shadow-md shadow-sky-200' : 'bg-gray-100 text-gray-300'} flex items-center justify-center transition-all transform group-hover:scale-110">
+                                <i class="fa-solid fa-play ml-0.5 text-xs"></i>
+                            </div>
                         </div>
                     </div>
                 `;
@@ -741,7 +960,6 @@ function renderDecksView() {
         items = items.filter(name => name.toLowerCase().includes(currentDeckFilter));
     }
 
-    // --- FILTRO DE COMPARTILHADOS (NOVO) ---
     const sharedPaths = new Set();
     if (filterOnlyShared) {
         Object.keys(mySharedDecksMap).forEach(key => {
@@ -768,14 +986,11 @@ function renderDecksView() {
     items.sort().forEach(itemName => {
         const info = groups[itemName];
 
-        // --- LÓGICA DE EXIBIÇÃO: FILTRO E TAG ---
         const deckKey = btoa(unescape(encodeURIComponent(info.fullPath))).replace(/=/g,'');
         const isSharedOut = mySharedDecksMap[deckKey] ? true : false;
         
         if (filterOnlyShared) {
-            // Se for deck, SÓ mostra se for compartilhado
             if (!info.isFolder && !isSharedOut) return;
-            // Se for pasta, SÓ mostra se tiver algum deck compartilhado DENTRO dela
             if (info.isFolder) {
                 let containsShared = false;
                 for (let sPath of sharedPaths) {
@@ -787,7 +1002,6 @@ function renderDecksView() {
                 if (!containsShared) return;
             }
         }
-        // ----------------------------------------
 
         const totalDue = info.due + info.new;
         const isDue = totalDue > 0;
@@ -809,6 +1023,7 @@ function renderDecksView() {
         if (info.isFolder) {
             foldersAdded++;
             cardEl.className = `bg-white rounded-2xl p-5 shadow-sm border border-amber-200/50 hover:shadow-lg hover:border-amber-300 transition flex flex-col justify-between h-40 group relative overflow-hidden`;
+            
             cardEl.innerHTML = `
                 <div class="deck-actions z-30">
                     <div class="drag-handle mr-2" title="Segure para arrastar"><i class="fa-solid fa-grip-vertical"></i></div>
@@ -826,10 +1041,19 @@ function renderDecksView() {
                     </div>
                     <div class="flex items-end justify-between mt-2 pl-1">
                         <div class="flex gap-3 opacity-70">
-                            <div><span class="text-lg font-extrabold text-gray-600">${info.new}</span><span class="text-[9px] font-bold text-gray-400 uppercase block leading-none">Novos</span></div>
-                            <div><span class="text-lg font-extrabold text-sky-600">${info.due}</span><span class="text-[9px] font-bold text-gray-400 uppercase block leading-none">Rev</span></div>
+                            <div class="flex flex-col items-center">
+                                <span class="text-base font-extrabold text-gray-600">${info.new}</span>
+                                <span class="text-[10px] font-bold text-gray-400 uppercase leading-none">Novos</span>
+                            </div>
+                            <div class="flex flex-col items-center">
+                                <span class="text-base font-extrabold text-sky-600">${info.due}</span>
+                                <span class="text-[10px] font-bold text-gray-400 uppercase leading-none">Rev</span>
+                            </div>
                         </div>
-                        <div class="text-gray-300 text-sm"><i class="fa-solid fa-chevron-right"></i></div>
+                        <div class="flex gap-2">
+                             <button onclick="window.studyFolder('${info.fullPath}', event)" class="w-8 h-8 rounded-full bg-amber-100 text-amber-600 hover:bg-amber-200 hover:scale-110 transition flex items-center justify-center shadow-sm" title="Estudar Tudo Nesta Pasta"><i class="fa-solid fa-play ml-0.5 text-xs"></i></button>
+                             <div class="w-8 h-8 rounded-full bg-gray-50 text-gray-300 flex items-center justify-center"><i class="fa-solid fa-chevron-right text-xs"></i></div>
+                        </div>
                     </div>
                 </div>
             `;
@@ -837,41 +1061,75 @@ function renderDecksView() {
         } else {
             decksAdded++;
             
-            // TAG COMPARTILHADO (Aparece no deck do DONO)
-            let sharedTagHTML = '';
+            let sharedIconHTML = '';
             if (isSharedOut) {
-                sharedTagHTML = `
-                    <div class="absolute top-0 left-0 bg-indigo-500 text-white text-[9px] px-2 py-1 rounded-br-lg z-20 font-bold tracking-wide shadow-sm pointer-events-none">
-                        <i class="fa-solid fa-share-nodes mr-1"></i> COMPARTILHADO
+                sharedIconHTML = `
+                    <div class="w-8 h-8 flex items-center justify-center rounded-full bg-indigo-50 text-indigo-500 mr-2" title="Este baralho está compartilhado">
+                        <i class="fa-solid fa-share-nodes text-xs"></i>
                     </div>
                 `;
             }
 
-            const statusBorder = isDue ? 'border-l-4 border-l-sky-500' : 'border-l-4 border-l-gray-200';
-            cardEl.className = `bg-white rounded-2xl p-5 shadow-sm border border-gray-100 hover:shadow-lg transition flex flex-col justify-between h-40 group relative overflow-hidden ${statusBorder}`;
+            const totalCards = info.total || 1;
+            const learnedCards = info.total - info.new;
+            const progressPercent = Math.round((learnedCards / totalCards) * 100);
+            
+            let barColor = 'bg-sky-500';
+            if(progressPercent >= 100) barColor = 'bg-emerald-500';
+            else if(progressPercent < 20) barColor = 'bg-gray-300';
+
+            const statusBorder = isDue ? 'border-l-4 border-l-sky-500' : 'border-l-4 border-l-gray-200'; 
+            
+            cardEl.className = `bg-white rounded-xl p-4 shadow-sm border border-gray-200 hover:shadow-md hover:border-sky-300 transition flex flex-col justify-between h-40 group relative overflow-hidden ${statusBorder}`;
             
             cardEl.innerHTML = `
-                ${sharedTagHTML} 
-                <div class="deck-actions z-30">
-                    <div class="drag-handle mr-2" title="Segure para arrastar"><i class="fa-solid fa-grip-vertical"></i></div>
-                    <button class="btn-deck-action" onclick="window.openDeckConfig('${info.fullPath}', event)" title="Configurações"><i class="fa-solid fa-gear"></i></button>
-                    <button class="btn-deck-action" onclick="window.quickExportDeck('${info.fullPath}', event)" title="Exportar JSON"><i class="fa-solid fa-download"></i></button>
-                    <button class="btn-deck-action" onclick="window.renameDeck('${info.fullPath}', event)" title="Renomear"><i class="fa-solid fa-pen"></i></button>
-                    <button class="btn-deck-action del" onclick="window.deleteDeck('${info.fullPath}', event)" title="Excluir"><i class="fa-solid fa-trash"></i></button>
+                <div class="deck-actions z-30 opacity-0 group-hover:opacity-100 transition-opacity absolute top-3 right-3 flex gap-2">
+                    <div class="drag-handle cursor-grab text-gray-300 hover:text-gray-500" title="Arrastar"><i class="fa-solid fa-grip-vertical"></i></div>
+                    <button class="text-gray-400 hover:text-sky-600 transition" onclick="window.renameDeck('${info.fullPath}', event)" title="Renomear"><i class="fa-solid fa-pen"></i></button>
+                    <button class="text-gray-400 hover:text-sky-600 transition" onclick="window.openDeckConfig('${info.fullPath}', event)" title="Configurações"><i class="fa-solid fa-gear"></i></button>
+                    <button class="text-gray-400 hover:text-sky-600 transition" onclick="window.quickExportDeck('${info.fullPath}', event)" title="Exportar"><i class="fa-solid fa-download"></i></button>
+                    <button class="text-gray-400 hover:text-red-500 transition" onclick="window.deleteDeck('${info.fullPath}', event)" title="Excluir"><i class="fa-solid fa-trash"></i></button>
                 </div>
                 
-                <div onclick="window.checkAndStartSession('${info.fullPath}', ${totalDue})" class="cursor-pointer h-full flex flex-col justify-between">
-                    <div class="mt-2">
-                        <h3 class="font-bold text-gray-800 text-lg group-hover:text-sky-600 transition truncate pr-16">${itemName}</h3>
-                        <p class="text-[10px] text-gray-400 font-bold uppercase mt-0.5">${info.total} Cartas</p>
-                        <p class="text-[9px] text-gray-400 italic mt-0.5">Visto: ${lastRevText}</p>
-                    </div>
-                    <div class="flex items-end justify-between mt-1">
-                        <div class="flex gap-4">
-                            <div><span class="text-xl font-extrabold text-green-500">${info.new}</span><span class="text-[9px] font-bold text-gray-400 uppercase block leading-none">Novos</span></div>
-                            <div><span class="text-xl font-extrabold text-sky-600">${info.due}</span><span class="text-[9px] font-bold text-gray-400 uppercase block leading-none">Rev</span></div>
+                <div onclick="window.checkAndStartSession('${info.fullPath}', ${totalDue})" class="cursor-pointer h-full flex flex-col justify-between relative z-10">
+                    
+                    <div>
+                        <div class="pr-20"> <h3 class="font-bold text-gray-800 text-base leading-tight group-hover:text-sky-600 transition truncate" title="${itemName}">${itemName}</h3>
+                            <p class="text-[10px] text-gray-400 mt-1 font-medium"><i class="fa-regular fa-clock mr-1"></i> ${lastRevText === 'Nunca' ? 'Nunca estudado' : lastRevText}</p>
                         </div>
-                        <div class="w-8 h-8 rounded-full ${isDue ? 'bg-sky-100 text-sky-600' : 'bg-gray-100 text-gray-300'} flex items-center justify-center shadow-sm"><i class="fa-solid fa-play ml-0.5 text-xs"></i></div>
+                    </div>
+
+                    <div class="w-full mt-2 mb-1">
+                        <div class="flex justify-between text-[9px] font-bold text-gray-400 mb-1 uppercase tracking-wider">
+                            <span>Domínio</span>
+                            <span>${progressPercent}%</span>
+                        </div>
+                        <div class="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden">
+                            <div class="h-full ${barColor} transition-all duration-700" style="width: ${progressPercent}%"></div>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center justify-between pt-2 border-t border-gray-50">
+                        <div class="flex gap-4">
+                            <div class="flex flex-col items-center">
+                                <span class="text-base font-bold text-green-500">${info.new}</span>
+                                <span class="text-[10px] font-bold text-gray-400 uppercase leading-none">Novos</span>
+                            </div>
+                            <div class="flex flex-col items-center">
+                                <span class="text-base font-bold text-sky-600">${info.due}</span>
+                                <span class="text-[10px] font-bold text-gray-400 uppercase leading-none">Rev</span>
+                            </div>
+                            <div class="flex flex-col items-center">
+                                <span class="text-base font-bold text-gray-400">${info.total}</span>
+                                <span class="text-[10px] font-bold text-gray-300 uppercase leading-none">Total</span>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center">
+                            ${sharedIconHTML} <div class="w-8 h-8 rounded-full ${isDue ? 'bg-sky-600 text-white shadow-md shadow-sky-200' : 'bg-gray-100 text-gray-300'} flex items-center justify-center transition-all transform group-hover:scale-110">
+                                <i class="fa-solid fa-play ml-0.5 text-xs"></i>
+                            </div>
+                        </div>
                     </div>
                 </div>
             `;
@@ -892,6 +1150,89 @@ function renderDecksView() {
     if(foldersAdded === 0 && decksAdded === 0) {
         emptyState.classList.remove('hidden');
     }
+}
+
+// --- NOVA FUNÇÃO: ESTUDAR PASTA RECURSIVAMENTE ---
+window.studyFolder = function(folderPath, event) {
+    if(event) event.stopPropagation();
+
+    const now = Date.now();
+    // Filtra todas as cartas que começam com o caminho da pasta
+    let cards = Object.keys(allCards)
+        .map(key => ({ ...allCards[key], firebaseKey: key }))
+        .filter(c => {
+            const deck = c.deck || "";
+            const matchesPath = deck === folderPath || deck.startsWith(folderPath + "::");
+            const matchesCat = (c.category || 'conteudo') === currentCategoryFilter;
+            return matchesPath && matchesCat;
+        });
+
+    // Filtra apenas as que precisam de revisão ou são novas
+    let dueCards = cards.filter(c => c.nextReview <= now || c.interval === 0);
+    
+    if (dueCards.length === 0) {
+        if(confirm(`Nada vencido nesta pasta (Total: ${cards.length} cartas).\n\nDeseja revisar TUDO nesta pasta (Modo Cramming)?`)) {
+            pendingDeckName = folderPath + " (Revisão Geral)"; // Nome fictício para exibição
+            pendingIsCramming = true;
+            // Hack: Precisamos injetar as cartas manualmente pois startStudySession busca por nome exato do deck
+            // Vamos criar uma função auxiliar ou adaptar a logica de start.
+            // Para simplificar, vamos usar uma variável global temporária para 'customQueue'
+            window.customStudyQueue = cards;
+            openTimerConfig(pendingDeckName, true);
+        }
+        return;
+    }
+
+    pendingDeckName = folderPath + " (Acumulado)";
+    pendingIsCramming = false;
+    window.customStudyQueue = dueCards; // Fila customizada
+    openTimerConfig(pendingDeckName, false);
+};
+
+// --- PEQUENO AJUSTE NA FUNÇÃO startStudySession PARA ACEITAR FILA CUSTOMIZADA ---
+// Substitua ou atualize sua função startStudySession por esta:
+function startStudySession(deckName, isCramming) {
+    currentDeckName = deckName;
+    const now = Date.now();
+
+// LOGICA DE FILA (IGUAL)
+    if (window.customStudyQueue) {
+        studyQueue = window.customStudyQueue;
+        window.customStudyQueue = null;
+    } else {
+        let cards = Object.keys(allCards).map(key => ({ ...allCards[key], firebaseKey: key }))
+            .filter(c => c.deck === deckName && (c.category || 'conteudo') === currentCategoryFilter);
+        studyQueue = isCramming ? cards : cards.filter(c => c.nextReview <= now || c.interval === 0);
+    }
+    
+    studyQueue.sort(() => Math.random() - 0.5);
+
+    if (!studyQueue || studyQueue.length === 0) return alert("Não há cartas para revisar agora.");
+
+    // NOVO: Define o tamanho total para a barra de progresso
+    initialSessionLength = studyQueue.length;
+    currentCardIndex = 0;
+    
+    // UI Updates...
+    const mainHeader = document.getElementById('mainHeader');
+    if(mainHeader) mainHeader.classList.add('hidden'); 
+
+    const viewDecks = document.getElementById('viewDecks');
+    if(viewDecks) viewDecks.classList.add('hidden');
+    
+    const viewStudy = document.getElementById('viewStudy');
+    if(viewStudy) viewStudy.classList.remove('hidden');
+    
+    const viewEmpty = document.getElementById('viewEmpty');
+    if(viewEmpty) viewEmpty.classList.add('hidden');
+    
+    const btnNewFolder = document.getElementById('btnNewFolderHeader');
+    if(btnNewFolder) btnNewFolder.classList.add('hidden');
+
+    const titleEl = document.getElementById('deckTitleDisplay');
+    if(titleEl) titleEl.innerText = deckName; // Exibe o nome da pasta ou do deck
+
+    showCurrentCard();
 }
 
 // --- FUNÇÃO PARA EXPANDIR/RECOLHER SEÇÕES (ACCORDION) ---
@@ -1179,6 +1520,7 @@ window.openCreateModal = function() {
     window.toggleFormatUI();
 };
 
+
 window.closeCreateModal = function() {
     document.getElementById('createModal').classList.add('hidden');
 };
@@ -1416,6 +1758,8 @@ window.renderFolderTree = function() {
 
 // --- CONFIGURAÇÃO DE BARALHO ---
 
+// --- CONFIGURAÇÃO DE BARALHO (ATUALIZADA) ---
+
 window.openDeckConfig = function(deckName, ev) {
     if(ev) ev.stopPropagation();
     currentDeckName = deckName;
@@ -1424,15 +1768,73 @@ window.openDeckConfig = function(deckName, ev) {
     document.getElementById('targetNameDisplay').innerText = deckName;
     window.switchConfigTab('settings'); 
 
-    const defaults = { easyBonus: 3.5, easyBonusUnit: 'days', goodInterval: 2.5, goodIntervalUnit: 'days', hardInterval: 1.2, hardIntervalUnit: 'days' };
+    // Defaults com Max Interval seguro (180 dias = 6 meses)
+    const defaults = { 
+        easyBonus: 3.5, easyBonusUnit: 'days', 
+        goodInterval: 2.5, goodIntervalUnit: 'days', 
+        hardInterval: 1.2, hardIntervalUnit: 'days',
+        maxInterval: 180 // Padrão de segurança jurídica
+    };
     const settings = deckSettings[deckName] || defaults;
     
+    // Popula inputs
     document.getElementById('cfgEasyBonus').value = settings.easyBonus || defaults.easyBonus;
     document.getElementById('cfgGoodInterval').value = settings.goodInterval || defaults.goodInterval;
     document.getElementById('cfgHardInterval').value = settings.hardInterval || defaults.hardInterval;
+    document.getElementById('cfgMaxInterval').value = settings.maxInterval || defaults.maxInterval; // NOVO
+    
     document.getElementById('unitEasyBonus').value = settings.easyBonusUnit || 'days';
     document.getElementById('unitGoodInterval').value = settings.goodIntervalUnit || 'days';
     document.getElementById('unitHardInterval').value = settings.hardIntervalUnit || 'days';
+};
+
+window.applyPreset = function(type) {
+    if (type === 'normal') {
+        // Longo Prazo (Estudo Padrão)
+        document.getElementById('cfgEasyBonus').value = 3.5;
+        document.getElementById('cfgGoodInterval').value = 2.5;
+        document.getElementById('cfgHardInterval').value = 1.2;
+        document.getElementById('cfgMaxInterval').value = 180; // 6 Meses
+        
+        document.getElementById('unitEasyBonus').value = 'days';
+        document.getElementById('unitGoodInterval').value = 'days';
+        document.getElementById('unitHardInterval').value = 'days';
+        alert("Aplicado: Perfil Longo Prazo (Foco em retenção).");
+    } else if (type === 'cramming') {
+        // Reta Final (Agressivo)
+        document.getElementById('cfgEasyBonus').value = 1.5; // Bônus pequeno
+        document.getElementById('cfgGoodInterval').value = 1.2; // Intervalo curto
+        document.getElementById('cfgHardInterval').value = 0.5; // Repete logo
+        document.getElementById('cfgMaxInterval').value = 21; // Max 3 semanas
+        
+        document.getElementById('unitEasyBonus').value = 'days';
+        document.getElementById('unitGoodInterval').value = 'days';
+        document.getElementById('unitHardInterval').value = 'days';
+        alert("Aplicado: Perfil Reta Final (Você verá os cards com muita frequência).");
+    }
+};
+
+window.saveDeckConfig = async function() {
+    const easy = parseFloat(document.getElementById('cfgEasyBonus').value)||3.5;
+    const easyUnit = document.getElementById('unitEasyBonus').value;
+    const good = parseFloat(document.getElementById('cfgGoodInterval').value)||2.5;
+    const goodUnit = document.getElementById('unitGoodInterval').value;
+    const hard = parseFloat(document.getElementById('cfgHardInterval').value)||1.2;
+    const hardUnit = document.getElementById('unitHardInterval').value;
+    const maxInt = parseFloat(document.getElementById('cfgMaxInterval').value)||365; // NOVO
+
+    deckSettings[currentDeckName] = { 
+        easyBonus: easy, easyBonusUnit: easyUnit,
+        goodInterval: good, goodIntervalUnit: goodUnit,
+        hardInterval: hard, hardIntervalUnit: hardUnit,
+        maxInterval: maxInt // Salva o limite
+    };
+
+    try { 
+        await set(ref(db, `users/${currentUserUID}/anki/settings`), deckSettings); 
+        alert("Configurações salvas com sucesso!"); 
+        window.closeDeckConfigModal(); 
+    } catch(e) { console.error(e); }
 };
 
 window.closeDeckConfigModal = function() {
@@ -1501,34 +1903,50 @@ function renderDeckHistory() {
         (c.category || 'conteudo') === currentCategoryFilter
     );
     
+    // Ordena pela última revisão (mais recente primeiro)
     cards.sort((a,b) => (b.lastReview || 0) - (a.lastReview || 0));
+
+    if(cards.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" class="p-6 text-center text-gray-400 text-xs italic">Nenhum histórico de estudo para este baralho.</td></tr>';
+        return;
+    }
 
     cards.forEach(card => {
         const tr = document.createElement('tr');
-        tr.className = "border-b border-gray-100 hover:bg-gray-50";
+        tr.className = "border-b border-gray-50 hover:bg-gray-50 transition group";
         
-        let ratingBadge = '<span class="rating-badge rating-none">Novo</span>';
+        let ratingBadge = '<span class="text-[10px] font-bold text-gray-300 bg-gray-100 px-1.5 py-0.5 rounded">Novo</span>';
         if(card.lastRating) {
-            const map = { 'again': 'Errei', 'hard': 'Difícil', 'good': 'Bom', 'easy': 'Fácil' };
-            const cls = `rating-${card.lastRating}`;
-            ratingBadge = `<span class="rating-badge ${cls}">${map[card.lastRating]}</span>`;
+            const map = { 'again': {l:'Errei', c:'text-red-600 bg-red-50'}, 'hard': {l:'Difícil', c:'text-orange-600 bg-orange-50'}, 'good': {l:'Bom', c:'text-green-600 bg-green-50'}, 'easy': {l:'Fácil', c:'text-sky-600 bg-sky-50'} };
+            const info = map[card.lastRating];
+            ratingBadge = `<span class="text-[10px] font-bold ${info.c} px-1.5 py-0.5 rounded uppercase tracking-wider">${info.l}</span>`;
         }
         
-        const dateStr = card.lastReview ? new Date(card.lastReview).toLocaleDateString() : '-';
+        const dateStr = card.lastReview ? new Date(card.lastReview).toLocaleDateString('pt-BR', {day:'2-digit', month:'2-digit'}) : '-';
+        
         let nextRevStr = '-';
         if(card.nextReview) {
-            const dNext = new Date(card.nextReview);
-            nextRevStr = dNext.toLocaleDateString();
-            if(card.nextReview <= Date.now()) nextRevStr = '<span class="text-red-500 font-bold text-xs">Agora</span>';
+            if(card.nextReview <= Date.now()) nextRevStr = '<span class="text-amber-500 font-bold text-xs"><i class="fa-solid fa-clock-rotate-left mr-1"></i>Agora</span>';
+            else nextRevStr = new Date(card.nextReview).toLocaleDateString('pt-BR', {day:'2-digit', month:'2-digit'});
         }
 
-        const frontText = card.front.replace(/<[^>]*>?/gm, '').substring(0, 40) + '...';
-        const btnEdit = `<button onclick="window.editCardFromHistory('${card.firebaseKey || getCardKey(card)}')" class="text-sky-600 hover:text-sky-800 p-1 bg-sky-50 rounded"><i class="fa-solid fa-pen"></i></button>`;
+        // MELHORIA: Mostra mais texto e remove tags HTML
+        let plainFront = card.front.replace(/<[^>]*>?/gm, '');
+        if(plainFront.length > 60) plainFront = plainFront.substring(0, 60) + '...';
+        
+        const btnEdit = `<button onclick="window.editCardFromHistory('${card.firebaseKey || getCardKey(card)}')" class="w-7 h-7 flex items-center justify-center rounded-full text-gray-400 hover:text-sky-600 hover:bg-sky-50 transition" title="Editar"><i class="fa-solid fa-pen text-xs"></i></button>`;
 
         tr.innerHTML = `
-            <td class="p-3 text-gray-700">${frontText}</td>
-            <td class="p-3 text-center">${ratingBadge}<br><span class="text-[9px] text-gray-400">${dateStr}</span></td>
-            <td class="p-3 text-center text-xs">${nextRevStr}</td>
+            <td class="p-3">
+                <div class="text-xs text-gray-700 font-medium leading-snug">${plainFront}</div>
+            </td>
+            <td class="p-3 text-center whitespace-nowrap">
+                <div class="flex flex-col items-center gap-1">
+                    ${ratingBadge}
+                    <span class="text-[9px] text-gray-400 font-mono">${dateStr}</span>
+                </div>
+            </td>
+            <td class="p-3 text-center text-xs font-mono text-gray-500">${nextRevStr}</td>
             <td class="p-3 text-right">${btnEdit}</td>
         `;
         tbody.appendChild(tr);
@@ -1698,39 +2116,6 @@ function openTimerConfig(deckName, isCramming) {
     document.getElementById('timerConfigModal').classList.remove('hidden');
 }
 
-function startStudySession(deckName, isCramming) {
-    currentDeckName = deckName;
-    const now = Date.now();
-    let cards = Object.keys(allCards).map(key => ({ ...allCards[key], firebaseKey: key }))
-        .filter(c => c.deck === deckName && (c.category || 'conteudo') === currentCategoryFilter);
-    
-    studyQueue = isCramming ? cards : cards.filter(c => c.nextReview <= now || c.interval === 0);
-    studyQueue.sort(() => Math.random() - 0.5);
-
-    if (!studyQueue || studyQueue.length === 0) return alert("Não há cartas para revisar neste baralho agora.");
-
-    currentCardIndex = 0;
-    
-    const mainHeader = document.getElementById('mainHeader');
-    if(mainHeader) mainHeader.classList.add('hidden'); // ESCONDE O HEADER
-
-    const viewDecks = document.getElementById('viewDecks');
-    if(viewDecks) viewDecks.classList.add('hidden');
-    
-    const viewStudy = document.getElementById('viewStudy');
-    if(viewStudy) viewStudy.classList.remove('hidden');
-    
-    const viewEmpty = document.getElementById('viewEmpty');
-    if(viewEmpty) viewEmpty.classList.add('hidden');
-    
-    const btnNewFolder = document.getElementById('btnNewFolderHeader');
-    if(btnNewFolder) btnNewFolder.classList.add('hidden');
-
-    const titleEl = document.getElementById('deckTitleDisplay');
-    if(titleEl) titleEl.innerText = deckName;
-
-    showCurrentCard();
-}
 
 function formatTime(days) {
     if(days < 1) {
@@ -1751,6 +2136,14 @@ function showCurrentCard() {
         studyQueue.splice(currentCardIndex, 1);
         showCurrentCard();
         return;
+    }
+
+    // ATUALIZA BARRA DE PROGRESSO
+    const progressEl = document.getElementById('sessionProgressBar');
+    if (initialSessionLength > 0 && progressEl) {
+        const completed = initialSessionLength - (studyQueue.length - currentCardIndex);
+        const pct = Math.round((completed / initialSessionLength) * 100);
+        progressEl.style.width = `${pct}%`;
     }
 
     document.getElementById('studyCounter').innerText = `${studyQueue.length - currentCardIndex} restantes`;
@@ -1899,8 +2292,13 @@ window.rateCard = async function(rating) {
     const now = Date.now();
     const oneDay = 24 * 60 * 60 * 1000;
     
-    // Configurações do Baralho
-    const defaults = { easyBonus: 3.5, easyBonusUnit: 'days', goodInterval: 2.5, goodIntervalUnit: 'days', hardInterval: 1.2, hardIntervalUnit: 'days' };
+    // Configurações do Baralho (Com suporte a MaxInterval)
+    const defaults = { 
+        easyBonus: 3.5, easyBonusUnit: 'days', 
+        goodInterval: 2.5, goodIntervalUnit: 'days', 
+        hardInterval: 1.2, hardIntervalUnit: 'days',
+        maxInterval: 180 // Default 180 dias
+    };
     const s = (deckSettings && deckSettings[currentDeckName]) ? deckSettings[currentDeckName] : defaults;
     
     let nextInterval = 1, nextEase = card.ease || 2.5;
@@ -1925,6 +2323,13 @@ window.rateCard = async function(rating) {
         nextEase += 0.15; 
     }
 
+    // --- NOVA LÓGICA: APLICA O TETO MÁXIMO (Visionário) ---
+    // Se não for 'again' (erro) e o intervalo calculado for maior que o teto configurado
+    if (rating !== 'again' && s.maxInterval && nextInterval > s.maxInterval) {
+        nextInterval = s.maxInterval;
+    }
+    // ------------------------------------------------------
+
     if (nextInterval < 0.0001 && rating !== 'again') nextInterval = 0.0007;
 
     // --- LÓGICA DE SALVAMENTO ---
@@ -1940,16 +2345,11 @@ window.rateCard = async function(rating) {
         };
 
         if (sharedSessionOwner) {
-            // MODO COMPARTILHADO (Salva no seu progresso isolado)
             updates[`users/${currentUserUID}/anki/shared_progress/${sharedSessionOwner}/${card.firebaseKey}`] = progressData;
         } else {
-            // MODO LOCAL (Seus Baralhos)
-            // 1. Prepara atualização para nuvem
             const updatedCard = { ...card, ...progressData };
             updates[`users/${currentUserUID}/anki/cards/${card.firebaseKey}`] = updatedCard;
             
-            // 2. CORREÇÃO DO BUG: Atualiza a memória local IMEDIATAMENTE
-            // Isso garante que ao voltar para o menu, os números estejam certos sem F5
             if (allCards[card.firebaseKey]) {
                 allCards[card.firebaseKey] = updatedCard;
             }
@@ -2006,13 +2406,16 @@ window.renderManagerList = function() {
     const tbody = document.getElementById('managerTableBody');
     const filterText = document.getElementById('managerSearch').value.toLowerCase();
     const filterDeck = document.getElementById('managerFilterDeck').value;
+    const selectAllBox = document.getElementById('managerSelectAll');
+    
     tbody.innerHTML = '';
     
+    if(selectAllBox) selectAllBox.checked = false;
+
     if(document.getElementById('managerFilterDeck').options.length <= 1) {
-        populateDeckSuggestions(); 
         const suggestions = new Set();
         Object.values(allCards).forEach(c => suggestions.add(c.deck));
-        suggestions.forEach(d => {
+        Array.from(suggestions).sort().forEach(d => {
             const opt = document.createElement('option');
             opt.value = d; opt.text = d;
             document.getElementById('managerFilterDeck').appendChild(opt);
@@ -2020,20 +2423,59 @@ window.renderManagerList = function() {
     }
 
     let cardsArray = Object.keys(allCards).map(key => ({...allCards[key], id: key}));
+    
     const filtered = cardsArray.filter(card => {
         const matchDeck = filterDeck === 'todos' || card.deck === filterDeck;
-        const searchContent = (card.front + ' ' + card.back + ' ' + card.deck).toLowerCase();
+        const searchContent = (
+            (card.front || '') + ' ' + 
+            (card.back || '') + ' ' + 
+            (card.deck || '') + ' ' + 
+            (card.legalBasis || '') 
+        ).toLowerCase();
+        
         return matchDeck && searchContent.includes(filterText);
     });
     
     filtered.forEach((card, index) => {
         const tr = document.createElement('tr');
-        tr.className = "border-b border-gray-100 hover:bg-gray-50 transition";
+        
+        // DETECTOR DE SANGUESSUGAS
+        const isLeech = card.ease && card.ease < 1.35; 
+        if(isLeech) {
+            tr.className = "border-b border-gray-100 transition leech-row"; // Classe definida no CSS
+            tr.title = "Sanguessuga: Fator de facilidade muito baixo. Recomendado resetar.";
+        } else {
+            tr.className = "border-b border-gray-100 hover:bg-gray-50 transition";
+        }
+        
         const previewFront = card.front.replace(/<[^>]*>?/gm, '').substring(0, 50) + '...';
+        
         let typeBadge = card.category === 'jurisprudencia' ? '<span class="text-[9px] bg-pink-100 text-pink-600 px-2 py-0.5 rounded font-bold">JURIS</span>' : '<span class="text-[9px] bg-blue-100 text-blue-600 px-2 py-0.5 rounded font-bold">CONT</span>';
         if(card.imported) typeBadge += ' <span class="text-[9px] bg-emerald-100 text-emerald-600 px-2 py-0.5 rounded font-bold ml-1" title="Importado"><i class="fa-solid fa-file-import"></i></span>';
 
-        tr.innerHTML = `<td class="p-4 font-mono text-gray-400 text-xs">${index + 1}</td><td class="p-4">${typeBadge}</td><td class="p-4 font-bold text-gray-600 text-xs">${card.deck}</td><td class="p-4 text-gray-700">${previewFront}</td><td class="p-4 text-center"><button class="text-sky-600 hover:text-sky-800 mr-3" onclick="window.editCard('${card.id}')"><i class="fa-solid fa-pen"></i></button><button class="text-red-400 hover:text-red-600" onclick="window.deleteCard('${card.id}')"><i class="fa-solid fa-trash"></i></button></td>`;
+        const legalText = card.legalBasis ? `<span class="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded border border-gray-200 font-mono">${card.legalBasis}</span>` : '<span class="text-gray-300 text-[10px]">-</span>';
+
+        const isChecked = selectedManagerCards.has(card.id) ? 'checked' : '';
+
+        // --- BOTÃO NOVO ADICIONADO ABAIXO (AMARELO) ---
+        tr.innerHTML = `
+            <td class="p-4 text-center">
+                <input type="checkbox" class="manager-card-checkbox rounded border-gray-300 text-sky-600 focus:ring-sky-500 cursor-pointer" 
+                data-id="${card.id}" onclick="window.toggleManagerCardSelection('${card.id}')" ${isChecked}>
+            </td>
+            <td class="p-4 font-mono text-gray-400 text-xs">${index + 1}</td>
+            <td class="p-4">${typeBadge}</td>
+            <td class="p-4 font-bold text-gray-600 text-xs">${card.deck}</td>
+            <td class="p-4 text-gray-700">${previewFront}</td>
+            <td class="p-4">${legalText}</td>
+            <td class="p-4 text-center">
+                <div class="flex items-center justify-center gap-2">
+                    <button class="text-amber-500 hover:text-amber-600" onclick="window.resetCardProgress('${card.id}')" title="Resetar Progresso (Sanguessuga)"><i class="fa-solid fa-rotate-right"></i></button>
+                    <button class="text-sky-600 hover:text-sky-800" onclick="window.editCard('${card.id}')" title="Editar"><i class="fa-solid fa-pen"></i></button>
+                    <button class="text-red-400 hover:text-red-600" onclick="window.deleteCard('${card.id}')" title="Excluir"><i class="fa-solid fa-trash"></i></button>
+                </div>
+            </td>
+        `;
         tbody.appendChild(tr);
     });
 };
@@ -2321,7 +2763,7 @@ window.quickExportDeck = function(deckPath, event) {
 
 //card certo e errado
 window.checkObjectiveAnswer = function(userChoice, event) {
-    if(event) event.stopPropagation(); 
+    if(event) event.stopPropagation(); // Adicione este if(event)
 
     const card = studyQueue[currentCardIndex];
     if (!card || !card.objectiveAnswer) {
@@ -2377,3 +2819,202 @@ window.checkObjectiveAnswer = function(userChoice, event) {
         window.revealCard();
     }, 600);
 };
+
+
+//resetar o progresso do cartão
+window.resetCardProgress = async function(id) {
+    if(!confirm("Deseja resetar o progresso deste card?\n\nEle voltará a ser um card NOVO e sairá do estado de Sanguessuga.")) return;
+
+    // Dados de um card "virgem"
+    const resetData = {
+        interval: 0,
+        ease: 2.5, // Volta para 250% (Padrão)
+        nextReview: Date.now(), // Disponível para estudar agora
+        lastReview: 0,
+        lastRating: null
+    };
+
+    try {
+        // Atualiza no Firebase
+        await update(ref(db, `users/${currentUserUID}/anki/cards/${id}`), resetData);
+        
+        // Atualiza Localmente (para ver o resultado na hora sem F5)
+        if(allCards[id]) {
+            allCards[id] = { ...allCards[id], ...resetData };
+        }
+        
+        // Re-renderiza a lista (a linha vermelha vai sumir)
+        window.renderManagerList();
+        
+    } catch (e) {
+        console.error(e);
+        alert("Erro ao resetar card.");
+    }
+};
+
+//backup dos cards completo
+// --- FUNÇÃO DE BACKUP COMPLETO (NOVO) ---
+window.exportFullBackup = function() {
+    if(Object.keys(allCards).length === 0) return alert("Não há dados para exportar.");
+
+    const backupData = {
+        type: 'FULL_BACKUP',
+        timestamp: Date.now(),
+        cards: allCards,
+        settings: deckSettings
+    };
+
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backupData, null, 2));
+    const dateStr = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+    
+    const downloadAnchorNode = document.createElement('a');
+    downloadAnchorNode.setAttribute("href", dataStr);
+    downloadAnchorNode.setAttribute("download", `Backup_Flashcards_${dateStr}.json`);
+    document.body.appendChild(downloadAnchorNode); 
+    downloadAnchorNode.click();
+    downloadAnchorNode.remove();
+};
+
+// --- IMPORTAÇÃO INTELIGENTE (ATUALIZADA) ---
+// Substitua a função window.importDeckAction existente por esta:
+window.importDeckAction = function() {
+    const input = document.getElementById('importFileInput');
+    if(input.files.length === 0) return alert("Selecione um arquivo JSON primeiro.");
+    
+    const file = input.files[0];
+    const reader = new FileReader();
+    
+    reader.onload = async function(e) {
+        try {
+            const data = JSON.parse(e.target.result);
+            
+            // CASO 1: É UM BACKUP COMPLETO (Restaura tudo)
+            if (data.type === 'FULL_BACKUP' && data.cards) {
+                if(!confirm("Este arquivo parece ser um BACKUP COMPLETO.\n\nIsso irá adicionar todos os cards e restaurar configurações.\nDeseja continuar?")) return;
+                
+                // Mescla ou sobrescreve? O Firebase update mescla chaves.
+                // Para restaurar exatamente, ideal seria setar, mas perigoso apagar dados novos.
+                // Vamos usar update para somar aos dados atuais.
+                const updates = {};
+                
+                // Restaura cards
+                Object.keys(data.cards).forEach(key => {
+                    updates[`users/${currentUserUID}/anki/cards/${key}`] = data.cards[key];
+                });
+                
+                // Restaura configurações
+                if(data.settings) {
+                    updates[`users/${currentUserUID}/anki/settings`] = data.settings;
+                }
+
+                await update(ref(db), updates);
+                alert("Backup restaurado com sucesso!");
+                loadAnkiData();
+                window.closeManagerModal();
+                return;
+            }
+
+            // CASO 2: É UM BARALHO ÚNICO (Lógica Antiga)
+            let importedCards = data;
+            // Se o JSON vier encapsulado (alguns exports fazem isso), tente extrair
+            if (!Array.isArray(importedCards) && importedCards.cards) {
+                 // Fallback se alguém tentar importar um backup como se fosse deck
+                 importedCards = Object.values(importedCards.cards);
+            }
+            
+            if(!Array.isArray(importedCards)) throw new Error("Formato de arquivo não reconhecido.");
+            
+            const mode = document.querySelector('input[name="importMode"]:checked').value;
+            let targetDeckName = "";
+            if(mode === 'new') {
+                targetDeckName = document.getElementById('importNewDeckName').value.trim();
+                if(!targetDeckName) return alert("Digite o nome do novo baralho.");
+            } else {
+                targetDeckName = document.getElementById('importTargetDeck').value;
+                if(!targetDeckName) return alert("Selecione o baralho existente.");
+            }
+
+            let count = 0;
+            const updates = {};
+            const now = Date.now();
+            
+            importedCards.forEach(card => {
+                if(!card.front || !card.back) return;
+                const newKey = push(ref(db, `users/${currentUserUID}/anki/cards`)).key;
+                
+                // Remove propriedades de sistema antigas para tratar como novo (exceto se quisermos manter histórico)
+                // Geralmente importação zera o histórico para você estudar do zero.
+                const newCard = { 
+                    front: card.front,
+                    back: card.back,
+                    category: card.category || 'conteudo',
+                    format: card.format || 'basic',
+                    legalBasis: card.legalBasis || '',
+                    link: card.link || '',
+                    objectiveAnswer: card.objectiveAnswer || null,
+                    deck: targetDeckName, 
+                    imported: true, 
+                    created: now, 
+                    interval: 0, 
+                    ease: 2.5, 
+                    nextReview: now, 
+                    lastReview: 0,
+                    lastRating: null
+                };
+                
+                updates[`users/${currentUserUID}/anki/cards/${newKey}`] = newCard;
+                count++;
+            });
+            
+            if(count > 0) {
+                await update(ref(db), updates);
+                alert(`${count} cartões importados para "${targetDeckName}"!`);
+                loadAnkiData(); 
+                window.closeManagerModal();
+                input.value = '';
+            } else { alert("Nenhum cartão válido encontrado no arquivo."); }
+
+        } catch(err) { console.error(err); alert("Erro ao importar: " + err.message); }
+    };
+    reader.readAsText(file);
+};
+
+// --- ATALHOS DE TECLADO (POWER USER) ---
+document.addEventListener('keydown', (e) => {
+    // Se estiver em algum modal ou input, ignora
+    if (!document.getElementById('viewStudy') || document.getElementById('viewStudy').classList.contains('hidden')) return;
+    if (document.querySelector('.editor-content:focus')) return;
+    if (!document.getElementById('deckConfigModal').classList.contains('hidden')) return;
+    if (!document.getElementById('createModal').classList.contains('hidden')) return;
+
+    const container = document.getElementById('flashcardContainer');
+    const isRevealed = container.classList.contains('revealed');
+    
+    // Espaço: Revelar
+    if (e.code === 'Space') {
+        e.preventDefault();
+        if (!isRevealed) {
+            window.revealCard();
+        } 
+    }
+
+    // Atalhos para Card OBJETIVO (Certo/Errado)
+    const card = studyQueue[currentCardIndex];
+    if (card && card.format === 'objective' && !isRevealed) {
+        if (e.key === 'ArrowLeft' || e.key === '1') {
+            window.checkObjectiveAnswer('certo'); // Esquerda = Certo (Padrão Tinder/Apps) - Ou ajuste conforme preferência
+        }
+        if (e.key === 'ArrowRight' || e.key === '2') {
+            window.checkObjectiveAnswer('errado');
+        }
+        return; 
+    }
+
+    // Atalhos de Avaliação (Só funcionam se revelado)
+    if (isRevealed) {
+        if (e.key === '1') window.rateCard('again');
+        if (e.key === '2') window.rateCard('hard');
+        if (e.key === '3') window.rateCard('good');
+        if (e.key === '4') window.rateCard('easy');
+    }
+});

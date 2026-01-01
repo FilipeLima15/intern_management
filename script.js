@@ -971,3 +971,401 @@ window.addEventListener('auth-ready', async (evt) => {
     await renderSubjectList();
     renderLogs();
 });
+
+///////////////////////////
+// SISTEMA DE NOTAS (NOVO)
+///////////////////////////
+
+// Variáveis de Estado das Notas
+let currentNoteSubject = null; // Qual matéria está aberta
+let currentNoteList = [];      // Lista de notas da matéria atual
+let editingNoteId = null;      // ID da nota sendo editada (null = nova)
+
+// Função Principal: Abrir o Caderno da Matéria Ativa
+window.openNotesForSubject = async function() {
+    // Descobre qual matéria está ativa na Sidebar
+    const activeLi = document.querySelector('#subjectList li.active');
+    
+    if (!activeLi) {
+        alert("Por favor, selecione uma disciplina no menu lateral primeiro.");
+        return;
+    }
+
+    const subjectName = activeLi.dataset.subject;
+    currentNoteSubject = subjectName;
+
+    // Atualiza o Título do Modal
+    const titleEl = document.getElementById('noteModalTitle');
+    if(titleEl) {
+        titleEl.innerHTML = `<i class="fa-regular fa-folder-open text-yellow-500 mr-2"></i> ${currentNoteSubject.toUpperCase()}`;
+    }
+
+    // Carrega dados do Firebase (usando a função loadSaved já existente)
+    const data = await loadSaved(currentNoteSubject);
+    
+    // Se existir _notesList usa, senão inicia vazio.
+    // (Mantemos retrocompatibilidade: se existir _notes antigo, poderíamos importar, mas vamos focar no novo sistema)
+    currentNoteList = data._notesList || [];
+
+    // Abre o Modal e vai para a lista
+    document.getElementById('noteModal').classList.remove('hidden');
+    window.switchNoteTab('list');
+};
+
+window.closeNoteModal = function() {
+    document.getElementById('noteModal').classList.add('hidden');
+    currentNoteSubject = null;
+    editingNoteId = null;
+};
+
+// Gerenciamento de Abas (Lista vs Editor)
+window.switchNoteTab = function(tab) {
+    // Ajusta classes dos botões
+    document.getElementById('tabListBtn').classList.toggle('active', tab === 'list');
+    document.getElementById('tabEditorBtn').classList.toggle('active', tab === 'editor');
+    
+    // Mostra/Oculta as Views
+    document.getElementById('viewList').classList.toggle('hidden', tab !== 'list');
+    document.getElementById('viewEditor').classList.toggle('hidden', tab !== 'editor');
+
+    if (tab === 'list') {
+        renderNoteList();
+    } else if (tab === 'editor') {
+        if (editingNoteId === null) window.startNewNote(); // Se não estiver editando, limpa para nova
+    }
+};
+
+// Renderiza a Grid de Arquivos (Com Sessões de Importância e Data em vez de GERAL)
+function renderNoteList() {
+    const container = document.getElementById('notesContainer');
+    const emptyState = document.getElementById('emptyStateList');
+    const filterContainer = document.getElementById('filterContainer');
+    
+    // Filtros
+    const searchInput = document.getElementById('internalSearch');
+    const subjectFilter = document.getElementById('filterNoteSubject');
+    const importanceFilter = document.getElementById('filterNoteImportance'); 
+
+    container.innerHTML = '';
+
+    if (!currentNoteList || currentNoteList.length === 0) {
+        emptyState.classList.remove('hidden');
+        if(filterContainer) filterContainer.classList.add('hidden');
+        return;
+    }
+
+    emptyState.classList.add('hidden');
+    if(filterContainer) filterContainer.classList.remove('hidden');
+
+    // 1. Popular Filtro de Matérias (Dinâmico)
+    const subjects = [...new Set(currentNoteList.map(n => n.subject || 'Geral'))].sort();
+    const currentSubjectVal = subjectFilter.value;
+    
+    subjectFilter.innerHTML = '<option value="todos">Todas as Matérias</option>';
+    subjects.forEach(s => {
+        if(s.trim()){
+            const opt = new Option(s, s);
+            subjectFilter.appendChild(opt);
+        }
+    });
+    if(subjects.includes(currentSubjectVal)) subjectFilter.value = currentSubjectVal;
+
+    // 2. Aplicar Filtros (Busca + Matéria + Importância)
+    const term = searchInput ? searchInput.value.toLowerCase().trim() : '';
+    const subjVal = subjectFilter.value;
+    const impVal = importanceFilter ? importanceFilter.value : 'todos';
+
+    const filteredList = currentNoteList.filter(n => {
+        const textMatch = !term || (n.title||'').toLowerCase().includes(term) || (n.content||'').toLowerCase().includes(term);
+        const subjMatch = (subjVal === 'todos') || (n.subject === subjVal) || (!n.subject && subjVal === 'Geral');
+        const nImp = n.importance || 'Normal';
+        const impMatch = (impVal === 'todos') || (nImp === impVal);
+
+        return textMatch && subjMatch && impMatch;
+    });
+
+    if (filteredList.length === 0) {
+        container.innerHTML = '<div class="text-gray-400 text-center py-10 col-span-full">Nenhuma nota encontrada com esses filtros.</div>';
+        return;
+    }
+
+    // 3. Agrupar por Importância
+    const importanceOrder = ['Alta', 'Média', 'Baixa', 'Normal'];
+    const groups = { 'Alta': [], 'Média': [], 'Baixa': [], 'Normal': [] };
+
+    filteredList.forEach(note => {
+        const imp = note.importance || 'Normal';
+        if (!groups[imp]) groups[imp] = [];
+        groups[imp].push(note);
+    });
+
+    // 4. Renderizar Sessões
+    importanceOrder.forEach(impKey => {
+        const notesInGroup = groups[impKey];
+        if (notesInGroup && notesInGroup.length > 0) {
+            
+            // Cabeçalho da Sessão
+            let colorClass = 'text-gray-500';
+            let iconClass = 'fa-circle';
+            let bgClass = 'bg-gray-100';
+            
+            if(impKey === 'Alta') { colorClass = 'text-red-600'; iconClass = 'fa-fire'; bgClass = 'bg-red-50'; }
+            if(impKey === 'Média') { colorClass = 'text-orange-500'; iconClass = 'fa-exclamation-circle'; bgClass = 'bg-orange-50'; }
+            if(impKey === 'Baixa') { colorClass = 'text-green-600'; iconClass = 'fa-arrow-down'; bgClass = 'bg-green-50'; }
+            if(impKey === 'Normal') { colorClass = 'text-sky-600'; iconClass = 'fa-folder'; bgClass = 'bg-sky-50'; }
+
+            const sectionHeader = document.createElement('div');
+            sectionHeader.className = `flex items-center gap-2 px-4 py-2 rounded-lg mb-3 mt-2 ${bgClass}`;
+            sectionHeader.innerHTML = `
+                <i class="fa-solid ${iconClass} ${colorClass}"></i>
+                <span class="font-bold text-sm text-gray-700 uppercase tracking-wide">${impKey} Prioridade</span>
+                <span class="text-xs text-gray-400 font-normal ml-auto">${notesInGroup.length} notas</span>
+            `;
+            container.appendChild(sectionHeader);
+
+            // Grid de Notas
+            const grid = document.createElement('div');
+            grid.className = 'note-file-grid mb-6';
+
+            notesInGroup.sort((a,b) => new Date(b.lastEdited || 0) - new Date(a.lastEdited || 0));
+
+            notesInGroup.forEach(note => {
+                const item = document.createElement('div');
+                item.className = 'note-file-item';
+                
+                let iconColor = '#94a3b8';
+                if (note.importance === 'Alta') iconColor = '#ef4444';
+                else if (note.importance === 'Média') iconColor = '#f59e0b';
+                else if (note.importance === 'Baixa') iconColor = '#10b981';
+                else if (note.importance === 'Normal') iconColor = '#3b82f6';
+
+                const rawText = (note.content || '').replace(/<[^>]*>?/gm, ' ').substring(0, 150);
+                
+                // DATA FORMATADA
+                const dateDisplay = note.lastEdited ? new Date(note.lastEdited).toLocaleDateString('pt-BR') : 'Novo';
+
+                item.innerHTML = `
+                    <div class="note-file-icon" style="color: ${iconColor}"><i class="fa-solid fa-file-lines"></i></div>
+                    <div class="note-file-title">${note.title || 'Sem Título'}</div>
+                    <div class="text-[9px] text-gray-400 mt-1 font-mono">${dateDisplay}</div>
+                `;
+
+                item.onmouseenter = () => {
+                    const panel = document.getElementById('notePreviewPanel');
+                    if(panel) {
+                        document.getElementById('previewTitle').innerText = note.title;
+                        document.getElementById('previewContent').innerText = rawText;
+                        panel.classList.add('visible');
+                    }
+                };
+                item.onmouseleave = () => {
+                    const panel = document.getElementById('notePreviewPanel');
+                    if(panel) panel.classList.remove('visible');
+                };
+
+                item.onclick = () => window.loadNoteIntoEditor(note.id);
+
+                grid.appendChild(item);
+            });
+            container.appendChild(grid);
+        }
+    });
+}
+// Exporta para global (se necessário)
+window.renderNoteList = renderNoteList;
+
+// Carregar Nota no Editor
+window.loadNoteIntoEditor = function(id) {
+    const note = currentNoteList.find(n => n.id === id);
+    if (!note) return;
+
+    editingNoteId = id;
+    
+    // Preenche campos
+    document.getElementById('noteTitleInput').value = note.title || '';
+    document.getElementById('noteImportanceInput').value = note.importance || '';
+    document.getElementById('noteContent').innerHTML = note.content || '';
+    
+    // Atualiza data mostrada
+    const dateStr = note.lastEdited ? new Date(note.lastEdited).toLocaleString() : 'Novo';
+    document.getElementById('lastEditedDisplay').innerText = `Salvo em: ${dateStr}`;
+    
+    // Mostra botão de excluir
+    document.getElementById('btnDeleteNote').classList.remove('hidden');
+
+    // Muda aba
+    window.switchNoteTab('editor');
+};
+
+// Preparar Editor para Nova Nota
+window.startNewNote = function() {
+    editingNoteId = null;
+    document.getElementById('noteTitleInput').value = '';
+    document.getElementById('noteImportanceInput').value = '';
+    document.getElementById('noteContent').innerHTML = '';
+    document.getElementById('lastEditedDisplay').innerText = 'Nova nota não salva';
+    document.getElementById('btnDeleteNote').classList.add('hidden');
+    document.getElementById('noteTitleInput').focus();
+};
+
+// Salvar Nota Atual
+window.saveCurrentNote = async function() {
+    if (!currentNoteSubject) return;
+
+    const title = document.getElementById('noteTitleInput').value.trim();
+    const importance = document.getElementById('noteImportanceInput').value;
+    const content = document.getElementById('noteContent').innerHTML;
+
+    if (!title && !content.trim()) {
+        alert("A nota precisa ter pelo menos um título ou conteúdo.");
+        return;
+    }
+
+    const now = new Date().toISOString();
+
+    const newNoteObj = {
+        id: editingNoteId || Date.now().toString(), // Se não tem ID, cria um timestamp
+        title: title || 'Sem Título',
+        importance: importance,
+        content: content,
+        lastEdited: now
+    };
+
+    // Atualiza a lista local
+    if (editingNoteId) {
+        // Editando existente: encontra e substitui
+        const index = currentNoteList.findIndex(n => n.id === editingNoteId);
+        if (index !== -1) currentNoteList[index] = newNoteObj;
+    } else {
+        // Nova nota: adiciona no array
+        currentNoteList.push(newNoteObj);
+        editingNoteId = newNoteObj.id; // Agora ela tem ID
+    }
+
+    // SALVA NO FIREBASE
+    // 1. Carrega o objeto completo da matéria
+    const savedData = await loadSaved(currentNoteSubject);
+    // 2. Atualiza a propriedade _notesList
+    savedData._notesList = currentNoteList;
+    // 3. Salva de volta
+    await saveSaved(currentNoteSubject, savedData);
+
+    // Feedback visual
+    document.getElementById('lastEditedDisplay').innerText = `Salvo em: ${new Date().toLocaleString()}`;
+    document.getElementById('btnDeleteNote').classList.remove('hidden');
+    
+    // Se quiser voltar pra lista automaticamente, descomente abaixo:
+    // window.switchNoteTab('list');
+    alert("Nota salva com sucesso!");
+};
+
+// Excluir Nota Atual
+window.deleteCurrentNote = async function() {
+    if (!editingNoteId) return;
+
+    if (confirm("Tem certeza que deseja excluir esta anotação?")) {
+        // Remove da lista local
+        currentNoteList = currentNoteList.filter(n => n.id !== editingNoteId);
+
+        // Salva no Firebase
+        const savedData = await loadSaved(currentNoteSubject);
+        savedData._notesList = currentNoteList;
+        await saveSaved(currentNoteSubject, savedData);
+
+        window.switchNoteTab('list');
+    }
+};
+
+// --- FUNÇÕES DA BARRA DE FERRAMENTAS DO EDITOR ---
+
+// Popovers de Cor
+window.toggleColorPopover = function(type) {
+    const id = `popover-${type}`;
+    const el = document.getElementById(id);
+    // Fecha outros
+    document.querySelectorAll('.color-popover').forEach(p => {
+        if (p.id !== id) p.classList.remove('show');
+    });
+    el.classList.toggle('show');
+};
+
+// Aplica Cor
+window.applyColor = function(type, color) {
+    // type pode ser 'hiliteColor' (fundo) ou 'foreColor' (texto)
+    // O comando execCommand usa esses nomes nativamente
+    document.execCommand(type === 'hiliteColor' ? 'hiliteColor' : 'foreColor', false, color);
+    
+    // Fecha popover
+    document.querySelectorAll('.color-popover').forEach(p => p.classList.remove('show'));
+};
+
+// Fecha popovers se clicar fora
+document.addEventListener('mousedown', (e) => {
+    if (!e.target.closest('.relative')) {
+        document.querySelectorAll('.color-popover').forEach(p => p.classList.remove('show'));
+    }
+});
+
+// --- FUNÇÕES EXTRAS DO EDITOR (Adicionar ao final do script.js) ---
+
+// 1. Inserir Tabela (com bordas pretas)
+window.insertTable = function() {
+    const rows = prompt("Quantas linhas?", 3);
+    const cols = prompt("Quantas colunas?", 3);
+    if (!rows || !cols) return;
+
+    let html = `<table style="width:100%; border-collapse: collapse; margin-bottom: 10px; border: 1px solid #000;"><tbody>`;
+    for (let i = 0; i < rows; i++) {
+        html += "<tr>";
+        for (let j = 0; j < cols; j++) {
+            html += `<td style="border: 1px solid #000; padding: 8px;">&nbsp;</td>`;
+        }
+        html += "</tr>";
+    }
+    html += "</tbody></table><p><br></p>";
+    document.execCommand('insertHTML', false, html);
+};
+
+// 2. Inserir Recuo de Parágrafo (Simulação de Tab)
+window.insertParagraphIndent = function() {
+    document.execCommand('insertHTML', false, '&nbsp;&nbsp;&nbsp;&nbsp;');
+};
+
+// 3. Inserir Modelos Rápidos (Templates)
+window.insertTemplate = function(type) {
+    let html = '';
+    
+    if(type === 'thesis') {
+        html = `
+            <div style="background-color: #f3e8ff; padding: 10px; border-left: 5px solid #9333ea; margin-bottom: 10px;">
+                <h4 style="margin: 0 0 5px 0; color: #6b21a8; font-weight: bold;">⚖️ TESE FIXADA:</h4>
+                <p style="margin: 0; color: #4c1d95; font-style: italic;">"Escreva a tese aqui..."</p>
+            </div><p><br></p>
+        `;
+    } else if(type === 'acordao') {
+        html = `
+            <p><b>Relator:</b> Min. Nome do Ministro</p>
+            <p><b>Órgão Julgador:</b> Turma/Pleno</p>
+            <p><b>Data do Julgamento:</b> ${new Date().toLocaleDateString()}</p>
+            <hr>
+            <p><b>Ementa:</b> ...</p>
+            <p><br></p>
+        `;
+    } else if(type === 'resumo') {
+        html = `
+            <h3 style="color: #0284c7;">1. Conceito</h3>
+            <p>...</p>
+            <h3 style="color: #0284c7;">2. Requisitos / Elementos</h3>
+            <p>...</p>
+            <h3 style="color: #0284c7;">3. Exceções</h3>
+            <p>...</p>
+        `;
+    }
+
+    if(html) {
+        document.execCommand('insertHTML', false, html);
+        // Fecha o popover de templates após clicar
+        const pop = document.getElementById('popover-templates');
+        if(pop) pop.classList.remove('show');
+    }
+};
