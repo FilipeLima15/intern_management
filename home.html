@@ -32,7 +32,7 @@
             </div>
         </header>
 
-        <div class="p-8 max-w-7xl mx-auto w-full space-y-8">
+        <div class="p-8 max-w-[1600px] mx-auto w-full space-y-8">
 
             <div class="bg-white rounded-2xl p-8 shadow-sm border border-gray-200 relative overflow-hidden group">
                 <div class="absolute top-0 right-0 w-64 h-64 bg-sky-50 rounded-bl-full -mr-16 -mt-16 transition group-hover:bg-sky-100"></div>
@@ -62,34 +62,51 @@
                 </div>
             </div>
 
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <a href="Cronograma.HTML" class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 hover:shadow-md hover:border-sky-300 transition group relative">
-                    <div class="w-12 h-12 rounded-lg bg-sky-50 text-sky-600 flex items-center justify-center mb-4 group-hover:bg-sky-600 group-hover:text-white transition">
-                        <i class="fa-solid fa-calendar-days text-xl"></i>
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+                
+                <a href="Cronograma.HTML" class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 hover:shadow-md hover:border-sky-300 transition group relative">
+                    <div class="w-10 h-10 rounded-lg bg-sky-50 text-sky-600 flex items-center justify-center mb-3 group-hover:bg-sky-600 group-hover:text-white transition">
+                        <i class="fa-solid fa-calendar-days text-lg"></i>
                     </div>
-                    <h3 class="text-lg font-bold text-gray-800 mb-1">Cronograma</h3>
-                    <p class="text-sm text-gray-500">Organize sua semana e horários de estudo.</p>
+                    <h3 class="text-base font-bold text-gray-800 mb-1">Cronograma</h3>
+                    <p class="text-xs text-gray-500">Organize sua semana.</p>
                 </a>
 
-                <a href="index.html" class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 hover:shadow-md hover:border-purple-300 transition group relative">
-                    <div class="w-12 h-12 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center mb-4 group-hover:bg-purple-600 group-hover:text-white transition">
-                        <i class="fa-solid fa-list-check text-xl"></i>
+                <a href="index.html" class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 hover:shadow-md hover:border-purple-300 transition group relative">
+                    <div class="w-10 h-10 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center mb-3 group-hover:bg-purple-600 group-hover:text-white transition">
+                        <i class="fa-solid fa-list-check text-lg"></i>
                     </div>
-                    <h3 class="text-lg font-bold text-gray-800 mb-1">Acompanhamento</h3>
-                    <p class="text-sm text-gray-500">Marque tópicos estudados e revisões.</p>
+                    <h3 class="text-base font-bold text-gray-800 mb-1">Acompanhamento</h3>
+                    <p class="text-xs text-gray-500">Marque seus estudos.</p>
                 </a>
 
-                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 hover:shadow-md hover:border-orange-300 transition group relative flex flex-col">
-                    <div class="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition">
-                        <button id="btnEditLink" class="text-gray-400 hover:text-sky-600 bg-white rounded-full p-2 shadow-sm border border-gray-100" title="Editar Link"><i class="fa-solid fa-pen"></i></button>
+                <a href="jurisprudencia.html" class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 hover:shadow-md hover:border-slate-400 transition group relative">
+                    <div class="w-10 h-10 rounded-lg bg-slate-100 text-slate-600 flex items-center justify-center mb-3 group-hover:bg-slate-700 group-hover:text-white transition">
+                        <i class="fa-solid fa-gavel text-lg"></i>
+                    </div>
+                    <h3 class="text-base font-bold text-gray-800 mb-1">Jurisprudência</h3>
+                    <p class="text-xs text-gray-500">Julgados e Súmulas.</p>
+                </a>
+
+                <a href="Flashcards.html" class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 hover:shadow-md hover:border-emerald-300 transition group relative">
+                    <div class="w-10 h-10 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center mb-3 group-hover:bg-emerald-600 group-hover:text-white transition">
+                        <i class="fa-solid fa-layer-group text-lg"></i>
+                    </div>
+                    <h3 class="text-base font-bold text-gray-800 mb-1">Flashcards</h3>
+                    <p class="text-xs text-gray-500">Revisão (Anki).</p>
+                </a>
+
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 hover:shadow-md hover:border-orange-300 transition group relative flex flex-col">
+                    <div class="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition z-10">
+                        <button id="btnEditLink" class="text-gray-400 hover:text-sky-600 bg-white rounded-full p-1.5 shadow-sm border border-gray-100" title="Editar Link"><i class="fa-solid fa-pen text-xs"></i></button>
                     </div>
                     
                     <a href="#" id="linkBancaCard" target="_blank" class="flex-1 block">
-                        <div class="w-12 h-12 rounded-lg bg-orange-50 text-orange-600 flex items-center justify-center mb-4 group-hover:bg-orange-600 group-hover:text-white transition">
-                            <i class="fa-solid fa-globe text-xl"></i>
+                        <div class="w-10 h-10 rounded-lg bg-orange-50 text-orange-600 flex items-center justify-center mb-3 group-hover:bg-orange-600 group-hover:text-white transition">
+                            <i class="fa-solid fa-globe text-lg"></i>
                         </div>
-                        <h3 class="text-lg font-bold text-gray-800 mb-1">Site da Banca</h3>
-                        <p class="text-sm text-gray-500">Acesse o edital e página de inscrições.</p>
+                        <h3 class="text-base font-bold text-gray-800 mb-1">Site da Banca</h3>
+                        <p class="text-xs text-gray-500">Acesse o edital.</p>
                         <p id="linkDisplayUrl" class="text-[10px] text-gray-300 mt-2 truncate">Configurar link...</p>
                     </a>
                 </div>
@@ -116,15 +133,13 @@
         import { ref, set, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
         import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
-        // --- CORREÇÃO: LOGOUT PRIORITÁRIO ---
-        // Movido para o topo para garantir funcionamento imediato
+        // --- LOGOUT PRIORITÁRIO ---
         document.addEventListener('click', (e) => {
-            // Procura o botão de logout (mesmo que clicado no ícone dentro dele)
             const btn = e.target.closest('#btnLogout');
             
             if (btn) {
                 e.preventDefault();
-                e.stopPropagation(); // Garante que nada bloqueie o clique
+                e.stopPropagation(); 
                 
                 if(confirm("Deseja realmente sair?")) {
                     console.log("Saindo do sistema...");
@@ -160,7 +175,6 @@
             } else {
                 currentUserUID = null;
                 countdownDisplay.innerHTML = '<p class="text-sm text-gray-400">Faça login</p>';
-                // Opcional: Redirecionar para login se não estiver logado
                 window.location.href = 'index.html';
             }
         });
@@ -172,13 +186,13 @@
                 if (snapshot.exists()) {
                     userConfig = snapshot.val();
                 } else {
-                    // Tenta migrar do LocalStorage se não existir na nuvem (apenas uma vez)
+                    // Migração LocalStorage (Legado)
                     const localDate = localStorage.getItem('examDate');
                     const localLink = localStorage.getItem('concursoURL');
                     if (localDate || localLink) {
                         if (localDate) userConfig.examDate = localDate;
                         if (localLink) userConfig.concursoURL = localLink;
-                        saveConfig(true); // Salva na nuvem silenciosamente
+                        saveConfig(true); 
                     }
                 }
                 updateUI();
@@ -209,7 +223,7 @@
             }, 3000);
         }
 
-        // --- ATUALIZAR INTERFACE ---
+        // --- ATUALIZAR INTERFACE (CORRIGIDA E COMPLETA) ---
         function updateUI() {
             // 1. Data e Countdown
             if (userConfig.examDate) {
@@ -217,9 +231,8 @@
                 
                 const targetDate = new Date(userConfig.examDate);
                 const today = new Date();
-                // Zera as horas para comparar apenas datas
                 today.setHours(0,0,0,0);
-                targetDate.setHours(0,0,0,0); // Ajuste para meia-noite do dia da prova
+                targetDate.setHours(0,0,0,0);
 
                 const diffTime = targetDate - today;
                 const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
@@ -250,9 +263,19 @@
 
             // 2. Link da Banca
             if (userConfig.concursoURL && userConfig.concursoURL !== '#') {
+                // Atualiza o Card da Home
                 linkBancaCard.href = userConfig.concursoURL;
                 linkDisplayUrl.innerText = userConfig.concursoURL;
                 linkDisplayUrl.className = "text-[10px] text-gray-400 mt-2 truncate";
+
+                // --- FIX: Atualizar Sincronia com Menu e LocalStorage ---
+                // Salva no navegador para o menu.js ler caso recarregue
+                localStorage.setItem('concursoURL', userConfig.concursoURL); 
+                
+                // Tenta atualizar o botão da sidebar imediatamente se ele existir
+                const sidebarBtn = document.querySelector('a[title="Link do Concurso"]');
+                if(sidebarBtn) sidebarBtn.href = userConfig.concursoURL;
+
             } else {
                 linkBancaCard.href = "#";
                 linkDisplayUrl.innerText = "Nenhum link configurado";
@@ -276,7 +299,7 @@
         });
 
         btnEditLink.addEventListener('click', (e) => {
-            e.preventDefault(); // Não abrir o link ao editar
+            e.preventDefault(); 
             const current = userConfig.concursoURL || "";
             const newUrl = prompt("Cole o link do site da banca/concurso:", current);
             if (newUrl !== null) {

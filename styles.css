@@ -215,7 +215,7 @@ table.table-modern {
 .th-group-theory { background-color: #f5f3ff !important; color: #6d28d9; border-bottom: 2px solid #ddd6fe !important; }
 .th-group-review { background-color: #fff7ed !important; color: #c2410c; border-bottom: 2px solid #ffedd5 !important; }
 .th-group-ex-book { background-color: #eff6ff !important; color: #1d4ed8; border-bottom: 2px solid #dbeafe !important; }
-.th-group-ex-tec  { background-color: #f0f9ff !important; color: #0284c7; border-bottom: 2px solid #e0f2fe !important; }
+.th-group-ex-tec  { background-color: #f0fdf4 !important; color: #15803d; border-bottom: 2px solid #dcfce7 !important; }
 
 /* --- COLUNAS FIXAS (STICKY LEFT) --- */
 .sticky-col-1 {
@@ -704,7 +704,7 @@ input[type="color"]::-webkit-color-swatch {
 }
 
 /* ============================================================
-   DRAG & DROP (ANKI)
+   DRAG & DROP
    ============================================================ */
 
 /* O item que está sendo arrastado fica meio transparente */

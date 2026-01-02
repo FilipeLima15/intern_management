@@ -2,73 +2,189 @@
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Gráficos de Estudo</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard de Desempenho</title>
+  
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <link rel="stylesheet" href="charts.css" />
+  
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
-  <header class="charts-header">
-    <div class="header-inner">
-      <div class="brand">
-        <h1>Gráficos & Estatísticas</h1>
-        <div class="subtitle">Visão geral por matéria — clique numa linha para abrir</div>
-      </div>
 
-      <div class="header-actions">
-        <div class="toolbar">
-          <input id="searchInput" class="input" type="search" placeholder="Buscar matéria…" />
+  <div class="dashboard-bg"></div>
 
-          <select id="sortSelect" class="input">
-            <option value="pctDesc">Maior % primeiro</option>
-            <option value="pctAsc">Menor % primeiro</option>
-            <option value="nameAsc">Nome (A→Z)</option>
-            <option value="nameDesc">Nome (Z→A)</option>
-            <option value="totalDesc">Mais itens</option>
-            <option value="totalAsc">Menos itens</option>
-          </select>
-
-          <input id="minPct" class="input input-number" type="number" min="0" max="100" step="5" value="0" title="Mínimo %" />
-
-          <label><input id="hideEmpty" type="checkbox" /> Ocultar sem itens</label>
-
-          <button id="exportJSON" class="btn">Exportar JSON</button>
-          <button id="exportCSV" class="btn">Exportar CSV</button>
-          <button id="refreshCharts" class="btn">Atualizar</button>
-          <button id="closeBtn" class="btn">Fechar</button>
+  <div class="app-container">
+    
+    <header class="dashboard-header glass-panel">
+      <div class="header-left">
+        <div class="icon-box">
+          <i class="fa-solid fa-chart-pie"></i>
+        </div>
+        <div>
+          <h1>Painel de Desempenho</h1>
+          <p>Visão estratégica do seu progresso</p>
         </div>
       </div>
-    </div>
-  </header>
 
-  <main id="chartsMain" class="charts-main">
-    <section class="summary-cards">
-      <div class="card stat" id="statAvg"></div>
-      <div class="card stat" id="statHigh"></div>
-      <div class="card stat" id="statPending"></div>
-      <div class="card stat" id="statSubjects"></div>
-    </section>
+      <div class="header-controls">
+        <div class="search-wrapper">
+          <i class="fa-solid fa-magnifying-glass"></i>
+          <input id="searchInput" type="search" placeholder="Filtrar disciplina..." />
+        </div>
 
-    <section id="summary" class="summary"></section>
-    <section id="bars" class="bars"></section>
-  </main>
+        <div class="filters-group">
+          <select id="sortSelect" title="Ordenação">
+            <option value="pctDesc">Maior Progresso</option>
+            <option value="pctAsc">Menor Progresso</option>
+            <option value="nameAsc">Nome (A-Z)</option>
+            <option value="totalDesc">Mais Conteúdo</option>
+          </select>
+          
+          <div class="toggle-wrapper" title="Ocultar matérias vazias">
+            <input id="hideEmpty" type="checkbox" />
+            <label for="hideEmpty"><i class="fa-solid fa-eye-slash"></i> Vazios</label>
+          </div>
+        </div>
 
-  <!-- Modal -->
-  <div id="detailModal" class="detail-modal">
-    <div class="detail-wrap">
-      <header class="detail-header">
-        <h2 id="detailTitle">Detalhes</h2>
-        <button id="detailClose" class="btn">✕</button>
+        <div class="actions-group">
+          <button id="refreshCharts" class="btn-icon" title="Atualizar Dados"><i class="fa-solid fa-rotate"></i></button>
+          <button id="exportMenuBtn" class="btn-icon" title="Exportar"><i class="fa-solid fa-download"></i></button>
+          <button id="closeBtn" class="btn-close" title="Fechar Dashboard"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+      </div>
+    </header>
+
+    <main id="chartsMain" class="dashboard-content">
+      
+      <section class="kpi-grid">
+        <div class="kpi-card glass-panel">
+          <div class="kpi-icon color-blue"><i class="fa-solid fa-graduation-cap"></i></div>
+          <div class="kpi-info">
+            <span class="kpi-label">Média Geral</span>
+            <strong class="kpi-value" id="statAvg">0%</strong>
+          </div>
+        </div>
+
+        <div class="kpi-card glass-panel">
+          <div class="kpi-icon color-green"><i class="fa-solid fa-circle-check"></i></div>
+          <div class="kpi-info">
+            <span class="kpi-label">Dominadas (≥70%)</span>
+            <strong class="kpi-value" id="statHigh">0</strong>
+          </div>
+        </div>
+
+        <div class="kpi-card glass-panel">
+          <div class="kpi-icon color-orange"><i class="fa-solid fa-triangle-exclamation"></i></div>
+          <div class="kpi-info">
+            <span class="kpi-label">Em Atenção</span>
+            <strong class="kpi-value" id="statPending">0</strong>
+          </div>
+        </div>
+
+        <div class="kpi-card glass-panel">
+          <div class="kpi-icon color-purple"><i class="fa-solid fa-layer-group"></i></div>
+          <div class="kpi-info">
+            <span class="kpi-label">Total Matérias</span>
+            <strong class="kpi-value" id="statSubjects">0</strong>
+          </div>
+        </div>
+      </section>
+
+      <div id="strategyBanner" class="strategy-banner glass-panel" style="margin-bottom: 24px; padding: 15px 20px; border-left: 5px solid #8b5cf6; background: linear-gradient(to right, #f5f3ff, rgba(255,255,255,0.8)); transition: all 0.3s ease;">
+        <div id="strategyHeader" style="display: flex; align-items: center; justify-content: space-between; cursor: pointer;">
+            <div style="display: flex; align-items: center; gap: 15px;">
+                <div style="background: #ddd6fe; color: #7c3aed; width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px;">
+                    <i class="fa-solid fa-bullseye"></i>
+                </div>
+                <div>
+                    <h3 style="margin: 0; font-size: 15px; font-weight: 800; color: #5b21b6;">Previsão de Término</h3>
+                </div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <span id="strategyHint" style="font-size: 11px; color: #9ca3af; font-weight: 600; text-transform: uppercase;">Expandir</span>
+                <i id="strategyArrow" class="fa-solid fa-chevron-down" style="color: #7c3aed; transition: transform 0.3s;"></i>
+            </div>
+        </div>
+        <div id="strategyContent" style="display: none; margin-top: 20px; border-top: 1px solid rgba(124, 58, 237, 0.1); padding-top: 15px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 20px;">
+                <div>
+                    <p id="predictionText" style="margin: 0; font-size: 14px; color: #6b7280; line-height: 1.5;">Analisando seu ritmo diário...</p>
+                </div>
+                <div style="text-align: right; min-width: 120px;">
+                    <div style="font-size: 11px; font-weight: 600; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.5px;">Data Estimada</div>
+                    <div id="predictionDate" style="font-size: 24px; font-weight: 800; color: #7c3aed;">--/--/----</div>
+                </div>
+            </div>
+        </div>
+      </div>
+
+      <section id="heatmapBanner" class="glass-panel" style="margin-bottom: 24px; padding: 15px 20px; transition: all 0.3s ease;">
+        <header id="heatmapHeader" style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;">
+            <div style="display:flex; align-items:center; gap:10px;">
+                <i class="fa-solid fa-fire text-orange-500 text-xl"></i>
+                <h3 style="margin:0; font-size:15px; font-weight:700; color:#334155;">Constância de Estudo</h3>
+            </div>
+            
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <span id="heatmapHint" style="font-size: 11px; color: #9ca3af; font-weight: 600; text-transform: uppercase;">Expandir</span>
+                <i id="heatmapArrow" class="fa-solid fa-chevron-down" style="color: #64748b; transition: transform 0.3s;"></i>
+            </div>
+        </header>
+        
+        <div id="heatmapContent" style="display: none; margin-top: 20px; border-top: 1px solid #f1f5f9; padding-top: 15px;">
+            
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <button id="hmBtnPrev" class="hm-nav-btn"><i class="fa-solid fa-chevron-left"></i></button>
+                    <span id="hmPeriodLabel" style="font-weight: 700; color: #334155; min-width: 140px; text-align: center; font-size: 14px;">Carregando...</span>
+                    <button id="hmBtnNext" class="hm-nav-btn"><i class="fa-solid fa-chevron-right"></i></button>
+                </div>
+                
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <div class="hm-view-toggle">
+                        <button id="hmViewMonth" class="hm-view-btn active">Mês</button>
+                        <button id="hmViewYear" class="hm-view-btn">Ano</button>
+                    </div>
+                </div>
+            </div>
+
+            <div style="display: flex; justify-content: flex-end; font-size: 11px; color: #94a3b8; gap: 5px; align-items: center; margin-bottom: 10px;">
+                Menos <span style="width:10px; height:10px; background:#f1f5f9; border-radius:2px; display:inline-block;"></span>
+                <span style="width:10px; height:10px; background:#bae6fd; border-radius:2px; display:inline-block;"></span>
+                <span style="width:10px; height:10px; background:#0284c7; border-radius:2px; display:inline-block;"></span>
+                <span style="width:10px; height:10px; background:#0c4a6e; border-radius:2px; display:inline-block;"></span> Mais
+            </div>
+
+            <div id="heatmapScroll" style="overflow-x: auto; padding-bottom: 5px; position: relative;">
+                <div id="heatmapMonths" class="heatmap-months"></div>
+                <div id="heatmapGrid" class="heatmap-grid"></div>
+            </div>
+        </div>
+      </section>
+
+      <div id="summary" class="summary-text"></div>
+
+      <section id="bars" class="subjects-list"></section>
+
+    </main>
+  </div>
+
+  <div id="detailModal" class="modal-overlay">
+    <div class="modal-window glass-panel">
+      <header class="modal-header">
+        <div class="modal-title-box">
+          <i class="fa-solid fa-book-open text-sky-500"></i>
+          <h2 id="detailTitle">Matéria</h2>
+        </div>
+        <button id="detailClose" class="btn-modal-close"><i class="fa-solid fa-xmark"></i></button>
       </header>
-      <div id="detailBody" class="detail-body"></div>
+      <div id="detailBody" class="modal-content"></div>
     </div>
   </div>
 
-  <footer class="charts-footer">
-    <small>Dados extraídos do banco local. Atalhos: <kbd>/</kbd> buscar · <kbd>R</kbd> atualizar · <kbd>Esc</kbd> fechar.</small>
-  </footer>
-
-  <script src="charts.js"></script>
+  <script type="module" src="charts.js"></script>
 
 </body>
 </html>

@@ -212,7 +212,8 @@ const COLS = {
   ex1Start: 8,
   ex2Start: 12
 };
-const TOTAL_COLS = 16;
+// Aumentamos para 17 pois o grupo C/E agora tem uma coluna extra (Brancas)
+const TOTAL_COLS = 17;
 
 let subjects = {};
 let subjectsOrder = [];
@@ -545,48 +546,101 @@ async function deleteRow(subject, delIdx){
 
 async function computePercentForRow(subject, rowIdx, groupStart){
   const saved = await loadSaved(subject);
-  const qKey = `r${rowIdx}_c${groupStart}`;     
-  const aKey = `r${rowIdx}_c${groupStart+1}`;   
-  const eKey = `r${rowIdx}_c${groupStart+2}`;   
-  const pKey = `r${rowIdx}_c${groupStart+3}`;   
+  const isCespe = (groupStart === COLS.ex2Start);
 
+  // Índices base
+  const qKey = `r${rowIdx}_c${groupStart}`;     // Qtd
+  const aKey = `r${rowIdx}_c${groupStart+1}`;   // Acertos
+  
+  // Leitura dos valores básicos
   const q = parseFloat(String(saved[qKey]||'').replace(',','.')) || 0;
   const a = parseFloat(String(saved[aKey]||'').replace(',','.')) || 0;
-  
-  const calcErrors = Math.max(0, q - a);
-  saved[eKey] = calcErrors;
-  
-  const errorInput = document.querySelector(`input[data-row="${rowIdx}"][data-col="${groupStart+2}"]`);
-  if(errorInput) errorInput.value = calcErrors;
 
   let pctVal = 0;
-  if (q > 0){
-     let val = (a / q) * 100;
-     if (isFinite(val)) pctVal = Math.max(0, Math.min(100,val));
+  let pctString = '0%';
+  let resultColIdx = 0; // Onde salvar a %
+
+  if (isCespe) {
+      // --- LÓGICA CESPE (C/E) ---
+      // Estrutura: Qtd(0) | Acertos(1) | Brancas(2) | Erros(3) | %(4)
+      
+      const bKey = `r${rowIdx}_c${groupStart+2}`; // Brancas
+      const eKey = `r${rowIdx}_c${groupStart+3}`; // Erros
+      resultColIdx = groupStart + 4; // A % fica na 5ª posição (índice 4)
+
+      // No CESPE, lemos o erro digitado pelo usuário (pois ele pode deixar em branco)
+      const e = parseFloat(String(saved[eKey]||'').replace(',','.')) || 0;
+
+      // Calcula Brancas Automaticamente (Q - (A + E))
+      const calcBrancas = Math.max(0, q - (a + e));
+      saved[bKey] = calcBrancas;
+      
+      // Atualiza o input de Brancas na tela
+      const brancasInput = document.querySelector(`input[data-row="${rowIdx}"][data-col="${groupStart+2}"]`);
+      if(brancasInput) brancasInput.value = calcBrancas;
+
+      // Cálculo Líquido: (Acertos - Erros) / Qtd
+      if (q > 0) {
+          const saldo = a - e;
+          // Permite nota negativa ou trava em 0? Geralmente trava em 0 visualmente ou mostra negativo.
+          // Vou deixar matemático puro. Se quiser travar em 0, use Math.max(0, ...)
+          let val = (saldo / q) * 100;
+          pctVal = val; 
+      }
+      
+  } else {
+      // --- LÓGICA MULTIPLA ESCOLHA (PADRÃO) ---
+      // Estrutura: Qtd(0) | Acertos(1) | Erros(2) | %(3)
+      
+      const eKey = `r${rowIdx}_c${groupStart+2}`; // Erros
+      resultColIdx = groupStart + 3; // A % fica na 4ª posição (índice 3)
+
+      // Calcula Erros Automaticamente (Q - A)
+      const calcErrors = Math.max(0, q - a);
+      saved[eKey] = calcErrors;
+      
+      const errorInput = document.querySelector(`input[data-row="${rowIdx}"][data-col="${groupStart+2}"]`);
+      if(errorInput) errorInput.value = calcErrors;
+
+      if (q > 0){
+         let val = (a / q) * 100;
+         if (isFinite(val)) pctVal = Math.max(0, Math.min(100,val));
+      }
   }
 
-  const pctString = Math.round(pctVal) + '%';
+  // Formatação final da porcentagem
+  pctString = Math.round(pctVal) + '%';
+  const pKey = `r${rowIdx}_c${resultColIdx}`;
+  
   const oldValue = saved[pKey] || '';
   saved[pKey] = pctString; 
 
   await saveSaved(subject, saved, {
       subject, 
       row: rowIdx+1, 
-      colLabel:(groupStart===COLS.ex1Start?'% Mult.':'% C/E'), 
+      colLabel:(isCespe?'% Cespe':'% Mult.'), 
       oldValue, 
       newValue: pctString
   });
 
+  // Atualiza Barra de Progresso
   const barContainer = document.getElementById(`prog-bar-${rowIdx}-${groupStart}`);
   const textContainer = document.getElementById(`prog-text-${rowIdx}-${groupStart}`);
   
   if (barContainer && textContainer) {
-      barContainer.style.width = pctVal + '%';
+      // Trava visual em 0% e 100% para a barra não quebrar, mesmo que o texto seja negativo
+      const visualPct = Math.max(0, Math.min(100, pctVal));
+      
+      barContainer.style.width = visualPct + '%';
       barContainer.classList.remove('perf-low', 'perf-med', 'perf-high', 'bg-gray-300');
-      if(q === 0) barContainer.style.backgroundColor = '#e2e8f0'; 
-      else {
+      
+      if(q === 0) {
+          barContainer.style.backgroundColor = '#e2e8f0'; 
+      } else {
           barContainer.style.backgroundColor = ''; 
-          barContainer.classList.add(getProgressColorClass(pctVal));
+          // Se for CESPE e negativo, pinta de vermelho (low)
+          if(pctVal < 0) barContainer.classList.add('perf-low');
+          else barContainer.classList.add(getProgressColorClass(pctVal));
       }
       textContainer.innerText = pctString;
   }
@@ -625,7 +679,7 @@ async function renderTable(subject, topicsBase, saved){
   table.className = 'table-modern';
 
   const thead = document.createElement('thead');
-  thead.innerHTML = `
+thead.innerHTML = `
     <tr>
       <th rowspan="2" class="sticky-col-1">#</th>
       <th rowspan="2" class="sticky-col-2">Assunto / Tópico</th>
@@ -633,7 +687,7 @@ async function renderTable(subject, topicsBase, saved){
       <th colspan="3" class="th-group-theory text-center">Material Teórico</th>
       <th colspan="4" class="th-group-review text-center">Ciclo de Revisão</th>
       <th colspan="4" class="th-group-ex-book text-center">Exercícios (Mult.)</th>
-      <th colspan="4" class="th-group-ex-tec text-center">Exercícios (C/E)</th>
+      <th colspan="5" class="th-group-ex-tec text-center">Exercícios (C/E)</th>
       <th rowspan="2" style="width: 60px;"></th>
     </tr>
     <tr>
@@ -644,13 +698,15 @@ async function renderTable(subject, topicsBase, saved){
       <th class="th-group-review font-semibold">7d</th>
       <th class="th-group-review font-semibold">15d</th>
       <th class="th-group-review font-semibold">30d</th>
+      
       <th class="th-group-ex-book font-semibold">Qtd</th>
       <th class="th-group-ex-book font-semibold">Acertos</th>
       <th class="th-group-ex-book font-semibold">Erros</th>
       <th class="th-group-ex-book font-semibold" style="min-width: 100px;">Desempenho</th>
+      
       <th class="th-group-ex-tec font-semibold">Qtd</th>
       <th class="th-group-ex-tec font-semibold">Acertos</th>
-      <th class="th-group-ex-tec font-semibold">Erros</th>
+      <th class="th-group-ex-tec font-semibold">Brancas</th> <th class="th-group-ex-tec font-semibold">Erros</th>
       <th class="th-group-ex-tec font-semibold" style="min-width: 100px;">Desempenho</th>
     </tr>
   `;
@@ -753,23 +809,49 @@ async function renderTable(subject, topicsBase, saved){
         divWrap.appendChild(divChk); td.appendChild(divWrap); tr.appendChild(td);
     }
 
-    const renderExerciseCols = (startIndex) => {
-        for(let offset=0; offset<3; offset++) {
+const renderExerciseCols = (startIndex) => {
+        const isCespe = (startIndex === COLS.ex2Start);
+        // Se for Cespe tem 4 inputs (Q, A, B, E), se for Mult tem 3 (Q, A, E)
+        const inputCount = isCespe ? 4 : 3;
+
+        for(let offset=0; offset < inputCount; offset++) {
             const colIdx = startIndex + offset;
             const td = document.createElement('td');
             const input = document.createElement('input');
-            input.type = "number"; input.className = "input-cell input-center"; input.placeholder = "-";
+            input.type = "number"; 
+            input.className = "input-cell input-center"; 
+            input.placeholder = "-";
+            
             const currentVal = saved[`r${idx}_c${colIdx}`] || '';
             input.value = currentVal;
-            input.dataset.row = idx; input.dataset.col = colIdx;
+            input.dataset.row = idx; 
+            input.dataset.col = colIdx;
 
-            if(offset === 2) { input.style.color = "#ef4444"; input.tabIndex = -1; }
-            if(offset === 1) input.style.color = "#15803d"; 
+            // CORES E COMPORTAMENTO
+            if (isCespe) {
+                // Lógica Cespe: 0=Qtd, 1=Acertos, 2=Brancas, 3=Erros
+                if(offset === 1) input.style.color = "#15803d"; // Acertos (Verde)
+                if(offset === 2) { 
+                    input.style.color = "#64748b"; // Brancas (Cinza) - Calculado
+                    input.tabIndex = -1; // Pula tab
+                    input.readOnly = true; // Usuário não edita Brancas diretamente, é calculado
+                    input.style.backgroundColor = "#f8fafc";
+                }
+                if(offset === 3) input.style.color = "#ef4444"; // Erros (Vermelho)
+            } else {
+                // Lógica Mult: 0=Qtd, 1=Acertos, 2=Erros
+                if(offset === 1) input.style.color = "#15803d"; // Acertos
+                if(offset === 2) { 
+                    input.style.color = "#ef4444"; // Erros (Auto-calc)
+                    input.tabIndex = -1; 
+                }
+            }
 
             input.addEventListener('change', (e) => {
                 const newVal = e.target.value;
+                // Pop-up de Confirmação para evitar apagar dados acidentalmente
                 if (newVal !== currentVal) {
-                    if (!confirm("Alterar dados da questão?")) {
+                    if (!confirm("Confirmar alteração de dados?")) {
                         e.target.value = saved[`r${idx}_c${colIdx}`] || '';
                         return;
                     }
@@ -779,10 +861,14 @@ async function renderTable(subject, topicsBase, saved){
                      saveSaved(subject, s_loaded).then(() => computePercentForRow(subject, idx, startIndex));
                 });
             });
-            td.appendChild(input); tr.appendChild(td);
+            td.appendChild(input); 
+            tr.appendChild(td);
         }
 
-        const pctColIdx = startIndex + 3;
+        // Coluna de Porcentagem (Desempenho)
+        // Se Cespe, a % está no offset 4. Se Mult, no offset 3.
+        const pctColIdx = startIndex + inputCount;
+        
         const tdPct = document.createElement('td');
         const rawPct = saved[`r${idx}_c${pctColIdx}`] || '0%';
         const numPct = parseFloat(rawPct) || 0;
@@ -790,7 +876,7 @@ async function renderTable(subject, topicsBase, saved){
         tdPct.innerHTML = `
             <div class="flex flex-col justify-center h-full px-2">
                 <div class="progress-wrapper">
-                    <div id="prog-bar-${idx}-${startIndex}" class="progress-fill ${getProgressColorClass(numPct)}" style="width: ${numPct}%"></div>
+                    <div id="prog-bar-${idx}-${startIndex}" class="progress-fill ${numPct < 0 ? 'perf-low' : getProgressColorClass(numPct)}" style="width: ${Math.max(0, Math.min(100, numPct))}%"></div>
                 </div>
                 <span id="prog-text-${idx}-${startIndex}" class="progress-text">${rawPct}</span>
             </div>

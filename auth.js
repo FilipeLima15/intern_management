@@ -64,35 +64,48 @@ onAuthStateChanged(auth, (user) => {
     }
 });
 
-// === 2. AÇÃO DE LOGIN ===
-if (loginBtn) {
-    loginBtn.addEventListener('click', async () => {
+// Ação do Botão Entrar
+if(loginBtn) {
+    loginBtn.addEventListener('click', async (e) => {
+        e.preventDefault();
         const email = emailInput.value;
         const pass = passInput.value;
-        
-        if (!email || !pass) {
-            loginError.textContent = "Preencha e-mail e senha.";
-            return;
-        }
 
-        loginError.textContent = ""; 
-        const originalBtnText = loginBtn.innerHTML;
-        loginBtn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Verificando...';
-        
         try {
+            // Tenta logar
             await signInWithEmailAndPassword(auth, email, pass);
-            // Sucesso: O onAuthStateChanged vai redirecionar a tela
-        } catch (error) {
-            loginBtn.innerHTML = originalBtnText;
-            console.error("Erro login:", error);
             
-            // Tratamento de erros comuns
-            if(error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
-                loginError.textContent = "E-mail ou senha incorretos.";
-            } else if (error.code === 'auth/too-many-requests') {
-                loginError.textContent = "Muitas tentativas. Aguarde um pouco.";
-            } else {
-                loginError.textContent = "Erro: " + error.message;
+            // --- REDIRECIONAMENTO ADICIONADO ---
+            // Se der certo, manda para a Home
+            window.location.href = 'home.html'; 
+            
+        } catch (error) {
+            console.error("Erro login:", error);
+            if(loginError) {
+                if (error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
+                    loginError.textContent = "E-mail ou senha incorretos.";
+                } else {
+                    loginError.textContent = "Erro ao entrar. Tente novamente.";
+                }
+            }
+        }
+    });
+}
+
+// Atalho ENTER para logar (Também precisa redirecionar)
+if(passInput) {
+    passInput.addEventListener('keypress', async (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            const email = emailInput.value;
+            const pass = passInput.value;
+            try {
+                await signInWithEmailAndPassword(auth, email, pass);
+                window.location.href = 'home.html'; // <--- Redireciona aqui também
+            } catch (error) {
+                // Tratamento de erro silencioso ou igual ao de cima
+                console.error("Erro login (Enter):", error);
+                if(loginError) loginError.textContent = "E-mail ou senha incorretos.";
             }
         }
     });
