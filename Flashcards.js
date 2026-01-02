@@ -1768,20 +1768,27 @@ window.openDeckConfig = function(deckName, ev) {
     document.getElementById('targetNameDisplay').innerText = deckName;
     window.switchConfigTab('settings'); 
 
-    // Defaults com Max Interval seguro (180 dias = 6 meses)
+    // Defaults Atualizados (Incluindo Errei = 0.5 horas)
     const defaults = { 
+        againInterval: 0.5, againIntervalUnit: 'hours', // NOVO: Padrão 30 min (0.5h)
         easyBonus: 3.5, easyBonusUnit: 'days', 
-        goodInterval: 2.5, goodIntervalUnit: 'days', 
+        goodInterval: 2.8, goodIntervalUnit: 'days', 
         hardInterval: 1.2, hardIntervalUnit: 'days',
-        maxInterval: 180 // Padrão de segurança jurídica
+        maxInterval: 180 
     };
     const settings = deckSettings[deckName] || defaults;
     
-    // Popula inputs
+    // Preenche o campo 'Errei' (Verifica se o elemento existe no HTML primeiro para evitar erro)
+    if(document.getElementById('cfgAgainInterval')) {
+        document.getElementById('cfgAgainInterval').value = settings.againInterval !== undefined ? settings.againInterval : defaults.againInterval;
+        document.getElementById('unitAgainInterval').value = settings.againIntervalUnit || 'hours';
+    }
+
+    // Preenche os outros campos
     document.getElementById('cfgEasyBonus').value = settings.easyBonus || defaults.easyBonus;
     document.getElementById('cfgGoodInterval').value = settings.goodInterval || defaults.goodInterval;
     document.getElementById('cfgHardInterval').value = settings.hardInterval || defaults.hardInterval;
-    document.getElementById('cfgMaxInterval').value = settings.maxInterval || defaults.maxInterval; // NOVO
+    document.getElementById('cfgMaxInterval').value = settings.maxInterval || defaults.maxInterval;
     
     document.getElementById('unitEasyBonus').value = settings.easyBonusUnit || 'days';
     document.getElementById('unitGoodInterval').value = settings.goodIntervalUnit || 'days';
@@ -1815,19 +1822,24 @@ window.applyPreset = function(type) {
 };
 
 window.saveDeckConfig = async function() {
+    // Leitura dos valores com segurança
+    const againVal = parseFloat(document.getElementById('cfgAgainInterval')?.value) || 0.5;
+    const againUnit = document.getElementById('unitAgainInterval')?.value || 'hours';
+
     const easy = parseFloat(document.getElementById('cfgEasyBonus').value)||3.5;
     const easyUnit = document.getElementById('unitEasyBonus').value;
-    const good = parseFloat(document.getElementById('cfgGoodInterval').value)||2.5;
+    const good = parseFloat(document.getElementById('cfgGoodInterval').value)||2.8;
     const goodUnit = document.getElementById('unitGoodInterval').value;
     const hard = parseFloat(document.getElementById('cfgHardInterval').value)||1.2;
     const hardUnit = document.getElementById('unitHardInterval').value;
-    const maxInt = parseFloat(document.getElementById('cfgMaxInterval').value)||365; // NOVO
+    const maxInt = parseFloat(document.getElementById('cfgMaxInterval').value)||180;
 
     deckSettings[currentDeckName] = { 
+        againInterval: againVal, againIntervalUnit: againUnit,
         easyBonus: easy, easyBonusUnit: easyUnit,
         goodInterval: good, goodIntervalUnit: goodUnit,
         hardInterval: hard, hardIntervalUnit: hardUnit,
-        maxInterval: maxInt // Salva o limite
+        maxInterval: maxInt
     };
 
     try { 
@@ -1869,27 +1881,6 @@ window.switchConfigTab = function(tabName) {
         if(btns[3]) btns[3].classList.add('active');
         window.renderSharedUsers();
     }
-};
-
-window.saveDeckConfig = async function() {
-    const easy = parseFloat(document.getElementById('cfgEasyBonus').value)||3.5;
-    const easyUnit = document.getElementById('unitEasyBonus').value;
-    const good = parseFloat(document.getElementById('cfgGoodInterval').value)||2.5;
-    const goodUnit = document.getElementById('unitGoodInterval').value;
-    const hard = parseFloat(document.getElementById('cfgHardInterval').value)||1.2;
-    const hardUnit = document.getElementById('unitHardInterval').value;
-
-    deckSettings[currentDeckName] = { 
-        easyBonus: easy, easyBonusUnit: easyUnit,
-        goodInterval: good, goodIntervalUnit: goodUnit,
-        hardInterval: hard, hardIntervalUnit: hardUnit
-    };
-
-    try { 
-        await set(ref(db, `users/${currentUserUID}/anki/settings`), deckSettings); 
-        alert("Configurações salvas!"); 
-        window.closeDeckConfigModal(); 
-    } catch(e) { console.error(e); }
 };
 
 // --- HISTÓRICO ---
@@ -2118,10 +2109,21 @@ function openTimerConfig(deckName, isCramming) {
 
 
 function formatTime(days) {
-    if(days < 1) {
-        const min = Math.round(days * 1440); 
-        return min + " min";
+    if (days < 1) {
+        // Converte frações de dia para minutos
+        const totalMinutes = Math.round(days * 1440);
+        
+        // Se for menos de 60 minutos, mostra "XX min"
+        if (totalMinutes < 60) {
+            return totalMinutes + " min";
+        } 
+        // Se for hora cheia ou quebrada (ex: 90 min), mostra "1.5 h"
+        else {
+            const hours = (totalMinutes / 60).toFixed(1).replace('.0', '');
+            return hours + " h";
+        }
     }
+    // Se for 1 dia ou mais
     return Math.round(days) + " dias";
 }
 
@@ -2148,7 +2150,6 @@ function showCurrentCard() {
 
     document.getElementById('studyCounter').innerText = `${studyQueue.length - currentCardIndex} restantes`;
     
-    // GARANTIA: Mostrar o botão Pular novamente ao iniciar um card
     const btnSkip = document.getElementById('btnSkipCard');
     if(btnSkip) btnSkip.classList.remove('hidden');
 
@@ -2158,18 +2159,15 @@ function showCurrentCard() {
     controls.classList.remove('opacity-100', 'pointer-events-auto');
     controls.classList.add('opacity-0', 'pointer-events-none');
     
-    // --- RESET VISUAL DOS BOTÕES E FEEDBACK ---
+    // UI Resets
     const objActions = document.getElementById('objectiveStudyActions');
     const feedbackDisplay = document.getElementById('objectiveFeedbackDisplay');
     const hint = document.getElementById('tapToRevealHint');
     
-    // Reseta botões (Desbloqueia e restaura cor)
     const btns = objActions.querySelectorAll('button');
     btns.forEach(b => {
         b.disabled = false; 
         b.classList.remove('opacity-50', 'cursor-not-allowed');
-        
-        // Estilo Base Compacto
         if(b.innerText.trim() === 'CERTO') {
             b.className = "bg-green-100 hover:bg-green-200 text-green-700 border border-green-200 px-4 py-2 rounded-lg font-bold text-sm shadow-sm transition w-24";
         } else {
@@ -2177,7 +2175,6 @@ function showCurrentCard() {
         }
     });
 
-    // Reseta Feedback
     if(feedbackDisplay) {
         feedbackDisplay.innerHTML = '';
         feedbackDisplay.classList.add('hidden');
@@ -2191,44 +2188,58 @@ function showCurrentCard() {
         hint.classList.remove('hidden');
     }
 
-    const defaults = { easyBonus: 3.5, easyBonusUnit: 'days', goodInterval: 2.5, goodIntervalUnit: 'days', hardInterval: 1.2, hardIntervalUnit: 'days' };
+    // --- LÓGICA DE CÁLCULO DOS BOTÕES (CORRIGIDA) ---
+    const defaults = { 
+        againInterval: 0.5, againIntervalUnit: 'hours',
+        easyBonus: 3.5, easyBonusUnit: 'days', 
+        goodInterval: 2.8, goodIntervalUnit: 'days', 
+        hardInterval: 1.2, hardIntervalUnit: 'days' 
+    };
     const s = deckSettings[currentDeckName] || defaults;
-    const currentInt = card.interval || 0;
+    
+    // Helper para converter tudo para dias
+    const getDays = (val, unit) => unit === 'minutes' ? val/1440 : (unit === 'hours' ? val/24 : val);
 
-    let tHard, tGood, tEasy;
-    const tAgain = "1 min"; 
+    const sAgain = getDays(s.againInterval !== undefined ? s.againInterval : defaults.againInterval, s.againIntervalUnit || 'hours');
+    const sHard = getDays(s.hardInterval, s.hardIntervalUnit);
+    const sGood = getDays(s.goodInterval, s.goodIntervalUnit);
+    const sEasy = getDays(s.easyBonus, s.easyBonusUnit);
 
-    if(s.hardIntervalUnit === 'minutes') tHard = formatTime(s.hardInterval / 1440);
-    else tHard = formatTime(Math.max(1, currentInt * s.hardInterval));
+    const currentInt = card.interval || 0; // Se for 0, é card novo
 
-    if(s.goodIntervalUnit === 'minutes') tGood = formatTime(s.goodInterval / 1440);
-    else tGood = formatTime(Math.max(1, currentInt * s.goodInterval));
+    // Variáveis para exibição
+    let valHard, valGood, valEasy;
 
-    if(s.easyBonusUnit === 'minutes') tEasy = formatTime(s.easyBonus / 1440);
-    else tEasy = formatTime(Math.max(4, currentInt * s.easyBonus));
+    if (currentInt === 0) {
+        // Card Novo: Usa o valor base da configuração
+        valHard = sHard;
+        valGood = sGood;
+        valEasy = sEasy;
+    } else {
+        // Revisão: Multiplica o intervalo atual pelo fator
+        valHard = currentInt * s.hardInterval; 
+        valGood = currentInt * s.goodInterval;
+        valEasy = currentInt * s.easyBonus;   
+    }
+    
+    // Errei é sempre fixo (Reset)
+    const valAgain = sAgain; 
 
-    document.getElementById('timeAgain').innerText = tAgain;
-    document.getElementById('timeHard').innerText = tHard;
-    document.getElementById('timeGood').innerText = tGood;
-    document.getElementById('timeEasy').innerText = tEasy;
+    // Atualiza os textos dos botões usando a nova formatTime
+    document.getElementById('timeAgain').innerText = formatTime(valAgain);
+    document.getElementById('timeHard').innerText = formatTime(valHard);
+    document.getElementById('timeGood').innerText = formatTime(valGood);
+    document.getElementById('timeEasy').innerText = formatTime(valEasy);
 
+    // Renderização do HTML do Card
     setTimeout(() => {
         const safeFront = card.front || "(Sem texto na frente)";
         let safeBack = card.back || "";
 
-        // --- NOVA MELHORIA: LIMPEZA INTELIGENTE DO GABARITO ---
-        // Se for Certo/Errado, remove palavras repetitivas do início do texto
         if (card.format === 'objective') {
-            // Regex poderosa: Remove "Certo", "Errado", "Gabarito: Errado", "Gab. Certo" e pontuações (. - :)
-            // Exemplo: "Errado. O Bob..." vira "O Bob..."
             safeBack = safeBack.replace(/^\s*(?:(?:gabarito|gab)[\s.:-]*)?(?:certo|errado|c|e)[\s.:-]*/i, '');
-            
-            // Se a letra ficou minúscula por causa do corte, coloca maiúscula (ex: "o Bob..." -> "O Bob...")
-            if(safeBack.length > 0) {
-                safeBack = safeBack.charAt(0).toUpperCase() + safeBack.slice(1);
-            }
+            if(safeBack.length > 0) safeBack = safeBack.charAt(0).toUpperCase() + safeBack.slice(1);
         }
-        // ------------------------------------------------------
 
         const frontHTML = processCloze(safeFront, false);
         let backHTML = safeBack;
@@ -2292,50 +2303,62 @@ window.rateCard = async function(rating) {
     const now = Date.now();
     const oneDay = 24 * 60 * 60 * 1000;
     
-    // Configurações do Baralho (Com suporte a MaxInterval)
+    // Busca configurações ou usa defaults
     const defaults = { 
+        againInterval: 0.5, againIntervalUnit: 'hours',
         easyBonus: 3.5, easyBonusUnit: 'days', 
-        goodInterval: 2.5, goodIntervalUnit: 'days', 
+        goodInterval: 2.8, goodIntervalUnit: 'days', 
         hardInterval: 1.2, hardIntervalUnit: 'days',
-        maxInterval: 180 // Default 180 dias
+        maxInterval: 180 
     };
     const s = (deckSettings && deckSettings[currentDeckName]) ? deckSettings[currentDeckName] : defaults;
     
-    let nextInterval = 1, nextEase = card.ease || 2.5;
+    // Helper de conversão
+    const getDays = (val, unit) => unit === 'minutes' ? val/1440 : (unit === 'hours' ? val/24 : val);
+    
+    // Valores base convertidos para dias
+    const sAgain = getDays(s.againInterval !== undefined ? s.againInterval : defaults.againInterval, s.againIntervalUnit || 'hours');
+    const sHard = getDays(s.hardInterval, s.hardIntervalUnit);
+    const sGood = getDays(s.goodInterval, s.goodIntervalUnit);
+    const sEasy = getDays(s.easyBonus, s.easyBonusUnit);
 
-    // Algoritmo SRS
+    let nextInterval = 1;
+    let nextEase = card.ease || 2.5;
+    const currentInt = card.interval || 0;
+
+    // --- CÁLCULO FINAL (Matemática aplicada) ---
+    
     if (rating === 'again') { 
-        nextInterval = 0; 
+        nextInterval = sAgain; // Reseta para o valor fixo (ex: 0.02 dias = 30min)
         nextEase = Math.max(1.3, nextEase - 0.2); 
     }
-    else if (rating === 'hard') { 
-        if (s.hardIntervalUnit === 'minutes') nextInterval = s.hardInterval / 1440.0;
-        else nextInterval = Math.max(1, (card.interval || 0) * s.hardInterval);
-        nextEase = Math.max(1.3, nextEase - 0.15); 
-    }
-    else if (rating === 'good') { 
-        if (s.goodIntervalUnit === 'minutes') nextInterval = s.goodInterval / 1440.0;
-        else nextInterval = Math.max(1, (card.interval || 0) * s.goodInterval);
-    }
-    else if (rating === 'easy') { 
-        if (s.easyBonusUnit === 'minutes') nextInterval = s.easyBonus / 1440.0;
-        else nextInterval = Math.max(4, (card.interval || 0) * s.easyBonus);
-        nextEase += 0.15; 
+    else {
+        // Se NÃO é 'again', verifica se é card NOVO (0) ou REVISÃO
+        if (rating === 'hard') {
+            // Se novo, usa valor base. Se revisão, multiplica.
+            nextInterval = (currentInt === 0) ? sHard : (currentInt * s.hardInterval);
+            nextEase = Math.max(1.3, nextEase - 0.15); 
+        }
+        else if (rating === 'good') {
+            nextInterval = (currentInt === 0) ? sGood : (currentInt * s.goodInterval);
+        }
+        else if (rating === 'easy') {
+            nextInterval = (currentInt === 0) ? sEasy : (currentInt * s.easyBonus);
+            nextEase += 0.15; 
+        }
     }
 
-    // --- NOVA LÓGICA: APLICA O TETO MÁXIMO (Visionário) ---
-    // Se não for 'again' (erro) e o intervalo calculado for maior que o teto configurado
+    // Aplica o Teto Máximo (se configurado)
     if (rating !== 'again' && s.maxInterval && nextInterval > s.maxInterval) {
         nextInterval = s.maxInterval;
     }
-    // ------------------------------------------------------
+    
+    // Segurança mínima para não bugar o agendamento (aprox 1 min)
+    if (nextInterval < 0.0007) nextInterval = 0.0007;
 
-    if (nextInterval < 0.0001 && rating !== 'again') nextInterval = 0.0007;
-
-    // --- LÓGICA DE SALVAMENTO ---
+    // Salva no Banco de Dados
     try {
         const updates = {};
-        
         const progressData = {
             interval: nextInterval,
             ease: nextEase,
@@ -2350,13 +2373,13 @@ window.rateCard = async function(rating) {
             const updatedCard = { ...card, ...progressData };
             updates[`users/${currentUserUID}/anki/cards/${card.firebaseKey}`] = updatedCard;
             
+            // Atualiza cache local
             if (allCards[card.firebaseKey]) {
                 allCards[card.firebaseKey] = updatedCard;
             }
         }
 
         await update(ref(db), updates);
-
         currentCardIndex++;
         showCurrentCard();
         

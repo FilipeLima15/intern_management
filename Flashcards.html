@@ -449,17 +449,32 @@
                         <div class="text-gray-500 mt-4 space-y-4 animate-fade-in pl-1">
                             
                             <div>
-                                <label class="block text-[10px] font-bold text-gray-400 mb-1">Bônus (Fácil)</label>
-                                <div class="flex gap-2"><input type="number" id="cfgEasyBonus" step="0.1" class="w-full border border-gray-200 p-2 rounded text-xs outline-none focus:border-sky-400 font-mono text-gray-600"><select id="unitEasyBonus" class="w-24 border border-gray-200 p-2 rounded text-xs bg-gray-50 font-bold text-gray-500 outline-none"><option value="days">Dias</option><option value="minutes">Min</option></select></div>
+                                <label class="block text-[10px] font-bold text-gray-400 mb-1">Intervalo do Errei</label>
+                                <div class="flex gap-2">
+                                    <input type="number" id="cfgAgainInterval" step="0.1" class="w-full border border-gray-200 p-2 rounded text-xs outline-none focus:border-sky-400 font-mono text-gray-600">
+                                    <select id="unitAgainInterval" class="w-24 border border-gray-200 p-2 rounded text-xs bg-gray-50 font-bold text-gray-500 outline-none">
+                                        <option value="hours">Horas</option>
+                                        <option value="minutes">Min</option>
+                                        <option value="days">Dias</option>
+                                    </select>
+                                </div>
                             </div>
+
                             <div>
-                                <label class="block text-[10px] font-bold text-gray-400 mb-1">Intervalo (Bom)</label>
+                                <label class="block text-[10px] font-bold text-gray-400 mb-1">Intervalo do Difícil</label>
+                                <div class="flex gap-2"><input type="number" id="cfgHardInterval" step="0.1" class="w-full border border-gray-200 p-2 rounded text-xs outline-none focus:border-sky-400 font-mono text-gray-600"><select id="unitHardInterval" class="w-24 border border-gray-200 p-2 rounded text-xs bg-gray-50 font-bold text-gray-500 outline-none"><option value="days">Dias</option><option value="minutes">Min</option></select></div>
+                            </div>   
+
+                            <div>
+                                <label class="block text-[10px] font-bold text-gray-400 mb-1">Intervalo do Bom</label>
                                 <div class="flex gap-2"><input type="number" id="cfgGoodInterval" step="0.1" class="w-full border border-gray-200 p-2 rounded text-xs outline-none focus:border-sky-400 font-mono text-gray-600"><select id="unitGoodInterval" class="w-24 border border-gray-200 p-2 rounded text-xs bg-gray-50 font-bold text-gray-500 outline-none"><option value="days">Dias</option><option value="minutes">Min</option></select></div>
                             </div>
+
                             <div>
-                                <label class="block text-[10px] font-bold text-gray-400 mb-1">Intervalo (Difícil)</label>
-                                <div class="flex gap-2"><input type="number" id="cfgHardInterval" step="0.1" class="w-full border border-gray-200 p-2 rounded text-xs outline-none focus:border-sky-400 font-mono text-gray-600"><select id="unitHardInterval" class="w-24 border border-gray-200 p-2 rounded text-xs bg-gray-50 font-bold text-gray-500 outline-none"><option value="days">Dias</option><option value="minutes">Min</option></select></div>
+                                <label class="block text-[10px] font-bold text-gray-400 mb-1">Intervalo do Fácil</label>
+                                <div class="flex gap-2"><input type="number" id="cfgEasyBonus" step="0.1" class="w-full border border-gray-200 p-2 rounded text-xs outline-none focus:border-sky-400 font-mono text-gray-600"><select id="unitEasyBonus" class="w-24 border border-gray-200 p-2 rounded text-xs bg-gray-50 font-bold text-gray-500 outline-none"><option value="days">Dias</option><option value="minutes">Min</option></select></div>
                             </div>
+
 
                         </div>
                     </details>
