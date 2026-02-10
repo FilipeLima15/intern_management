@@ -2279,8 +2279,22 @@ function showCurrentCard() {
     }, 100);
 }
 
-window.revealCard = function() {
+window.revealCard = function(forceReveal = false) {
     const container = document.getElementById('flashcardContainer');
+    
+    // --- LÓGICA DE PROTEÇÃO (NOVO) ---
+    // Se for um card de Certo/Errado (objective), bloqueia o clique no fundo branco.
+    // Só permite revelar se forceReveal for true (vindo dos botões de resposta)
+    // ou se o card JÁ estiver revelado (para não quebrar a UI).
+    if (studyQueue && studyQueue.length > 0) {
+        const currentCard = studyQueue[currentCardIndex];
+        if (currentCard && currentCard.format === 'objective') {
+            if (!forceReveal && !container.classList.contains('revealed')) {
+                return; // Bloqueia a ação
+            }
+        }
+    }
+    // ---------------------------------
     
     // Esconde o botão Pular assim que revelar
     const btnSkip = document.getElementById('btnSkipCard');
@@ -2793,26 +2807,23 @@ window.quickExportDeck = function(deckPath, event) {
 
 //card certo e errado
 window.checkObjectiveAnswer = function(userChoice, event) {
-    if(event) event.stopPropagation(); // Adicione este if(event)
+    if(event) event.stopPropagation(); 
 
     const card = studyQueue[currentCardIndex];
     if (!card || !card.objectiveAnswer) {
-        window.revealCard();
+        window.revealCard(true); // Garante que revele mesmo se falhar a lógica
         return;
     }
     
-    // --- NOVO: BLOQUEIA TODOS OS BOTÕES IMEDIATAMENTE ---
+    // Bloqueia botões
     const allBtns = document.querySelectorAll('#objectiveStudyActions button');
     allBtns.forEach(b => {
         b.disabled = true;
         b.classList.add('opacity-50', 'cursor-not-allowed');
-        // Remove transformações de hover para não parecer clicável
         b.classList.remove('hover:bg-green-200', 'hover:bg-red-200', 'transform', 'scale-110');
     });
-    // ----------------------------------------------------
 
     const btn = event.target;
-    // Remove a opacidade do botão clicado para ele ficar em destaque (opcional, mas fica bonito)
     btn.classList.remove('opacity-50'); 
 
     const isCorrect = (userChoice === card.objectiveAnswer);
@@ -2846,7 +2857,8 @@ window.checkObjectiveAnswer = function(userChoice, event) {
     }
 
     setTimeout(() => {
-        window.revealCard();
+        // AQUI ESTÁ A MUDANÇA: passamos 'true' para forçar a revelação
+        window.revealCard(true);
     }, 600);
 };
 
