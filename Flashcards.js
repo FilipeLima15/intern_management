@@ -1624,12 +1624,16 @@ window.saveCard = async function() {
     try {
         if (id) { 
             const existingCard = allCards[id] || {};
-            cardData.interval = existingCard.interval;
-            cardData.ease = existingCard.ease;
-            cardData.nextReview = existingCard.nextReview;
-            cardData.lastReview = existingCard.lastReview;
-            cardData.created = existingCard.created;
-            cardData.lastRating = existingCard.lastRating;
+            
+            // --- CORREÇÃO: SANITIZAÇÃO DE DADOS (EVITA UNDEFINED) ---
+            // O Firebase não aceita undefined. Usamos || null ou valores padrão.
+            cardData.interval = existingCard.interval !== undefined ? existingCard.interval : 0;
+            cardData.ease = existingCard.ease !== undefined ? existingCard.ease : 2.5;
+            cardData.nextReview = existingCard.nextReview !== undefined ? existingCard.nextReview : Date.now();
+            cardData.lastReview = existingCard.lastReview !== undefined ? existingCard.lastReview : 0;
+            cardData.created = existingCard.created || Date.now();
+            cardData.lastRating = existingCard.lastRating || null; // <--- AQUI ESTAVA O ERRO PRINCIPAL
+            // --------------------------------------------------------
 
             await update(ref(db, `users/${currentUserUID}/anki/cards/${id}`), cardData); 
             
@@ -1660,6 +1664,9 @@ window.saveCard = async function() {
             cardData.ease = 2.5; 
             cardData.nextReview = Date.now(); 
             cardData.created = Date.now(); 
+            cardData.lastReview = 0; 
+            cardData.lastRating = null;
+
             await push(ref(db, `users/${currentUserUID}/anki/cards`), cardData); 
             alert("Criado!"); 
         }
@@ -1676,7 +1683,7 @@ window.saveCard = async function() {
         }
         
         loadAnkiData();
-    } catch (e) { console.error(e); alert("Erro ao salvar."); }
+    } catch (e) { console.error(e); alert("Erro ao salvar: " + e.message); }
 };
 
 // --- FUNÇÃO PARA EDITAR NO MEIO DO ESTUDO ---
