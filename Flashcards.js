@@ -192,6 +192,17 @@ let mySharedDecksMap = {}; // <--- NOVO: Armazena o que EU compartilhei
 // --- HELPERS PARA COMPARTILHAMENTO ---
 // O Firebase não aceita '.', '#', '$', '[', ']' em chaves.
 const encodeEmail = (email) => btoa(email).replace(/\=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+
+// Funções para permitir pontos e caracteres especiais nos nomes dos decks no Firebase
+const encodeKey = (str) => btoa(unescape(encodeURIComponent(str))).replace(/\//g, '_').replace(/\+/g, '-').replace(/=/g, '');
+
+const decodeKey = (str) => {
+    try {
+        return decodeURIComponent(escape(atob(str.replace(/-/g, '+').replace(/_/g, '/'))));
+    } catch (e) {
+        return str; // Retorna original se não estiver codificado (compatibilidade antiga)
+    }
+};
 // Não precisamos decodificar frequentemente, mas se precisar: 
 // const decodeEmail = (str) => atob(str.replace(/-/g, '+').replace(/_/g, '/'));
 
@@ -385,7 +396,14 @@ async function loadAnkiData() {
         allCards = cardsSnap.exists() ? cardsSnap.val() : {};
         
         const settingsSnap = await get(ref(db, `users/${currentUserUID}/anki/settings`));
-        deckSettings = settingsSnap.exists() ? settingsSnap.val() : {};
+        const rawSettings = settingsSnap.exists() ? settingsSnap.val() : {};
+        
+        // --- CORREÇÃO: Decodifica as chaves para uso interno ---
+        deckSettings = {};
+        Object.keys(rawSettings).forEach(key => {
+            deckSettings[decodeKey(key)] = rawSettings[key];
+        });
+        // -------------------------------------------------------
 
         // <--- NOVO: Carrega lista de compartilhamentos enviados
         const sharedOutSnap = await get(ref(db, `users/${currentUserUID}/anki/shared_out`));
@@ -1841,6 +1859,7 @@ window.saveDeckConfig = async function() {
     const hardUnit = document.getElementById('unitHardInterval').value;
     const maxInt = parseFloat(document.getElementById('cfgMaxInterval').value)||180;
 
+    // Atualiza na memória (mantém o nome original legível para o app)
     deckSettings[currentDeckName] = { 
         againInterval: againVal, againIntervalUnit: againUnit,
         easyBonus: easy, easyBonusUnit: easyUnit,
@@ -1850,10 +1869,16 @@ window.saveDeckConfig = async function() {
     };
 
     try { 
-        await set(ref(db, `users/${currentUserUID}/anki/settings`), deckSettings); 
+        // --- CORREÇÃO: Salva apenas este deck com a chave CODIFICADA ---
+        const safeKey = encodeKey(currentDeckName);
+        await update(ref(db, `users/${currentUserUID}/anki/settings/${safeKey}`), deckSettings[currentDeckName]); 
+        
         alert("Configurações salvas com sucesso!"); 
         window.closeDeckConfigModal(); 
-    } catch(e) { console.error(e); }
+    } catch(e) { 
+        console.error(e); 
+        alert("Erro ao salvar config: " + e.message);
+    }
 };
 
 window.closeDeckConfigModal = function() {
