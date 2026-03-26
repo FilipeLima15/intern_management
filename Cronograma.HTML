@@ -23,6 +23,9 @@
                 <button id="manualSaveBtn" class="bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm transition flex items-center gap-2 hidden">
                     <i class="fa-solid fa-cloud-arrow-up"></i> Salvar Agora
                 </button>
+                <button id="clearChecksBtn" class="bg-gray-100 hover:bg-red-50 text-gray-500 hover:text-red-500 border border-gray-200 hover:border-red-200 px-4 py-2 rounded-lg text-sm font-medium shadow-sm transition flex items-center gap-2">
+                    <i class="fa-solid fa-circle-check"></i> Limpar Checks
+                </button>
                 <button id="addRowBtn" class="bg-sky-600 hover:bg-sky-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm transition flex items-center gap-2">
                     <i class="fa-solid fa-plus"></i> Novo Horário
                 </button>
@@ -160,6 +163,7 @@
     let isMouseDownForSelect = false;
     let focusedCell = null; // Guarda a célula onde o cursor está no momento
 
+    // checks[rowIndex][colIndex] = true/false — salvo junto com o cronograma
     // Cores favoritas separadas para texto e fundo
     let favTextColors = [
         '#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6',
@@ -248,14 +252,16 @@
                     days: r.days || Array(7).fill(''),
                     timeBg: r.timeBg||'', bg: r.bg||Array(7).fill(''),
                     timeColor: r.timeColor||'', color: r.color||Array(7).fill(''),
-                    timeAlign: r.timeAlign||'', align: r.align||Array(7).fill('')
+                    timeAlign: r.timeAlign||'', align: r.align||Array(7).fill(''),
+                    // checks: array de 8 posições (0=horário, 1-7=dias)
+                    checks: r.checks||Array(8).fill(false)
                 }));
             } else {
                 // Dados padrão
                 console.log("ℹ️ Nenhum dado encontrado, criando padrão...");
                 scheduleData = [
-                    { time: '08:00', days: ['Descanso', 'Português', 'Matemática', 'Direito Const.', 'Informática', 'Revisão', 'Simulado'], bg:[], color:[], align:[] },
-                    { time: '14:00', days: ['Lazer', 'Dir. Admin', 'Raciocínio', 'Dir. Penal', 'Atualidades', 'Lei Seca', 'Correção'], bg:[], color:[], align:[] }
+                    { time: '08:00', days: ['Descanso', 'Português', 'Matemática', 'Direito Const.', 'Informática', 'Revisão', 'Simulado'], bg:[], color:[], align:[], checks: Array(8).fill(false) },
+                    { time: '14:00', days: ['Lazer', 'Dir. Admin', 'Raciocínio', 'Dir. Penal', 'Atualidades', 'Lei Seca', 'Correção'], bg:[], color:[], align:[], checks: Array(8).fill(false) }
                 ];
                 saveToFirebase(true); 
             }
@@ -361,7 +367,18 @@
             if (row.timeColor) timeDiv.style.color = row.timeColor;
             if (row.timeAlign) timeDiv.style.textAlign = row.timeAlign;
             
+            // Botão check da coluna horário (posição 0)
+            const timeCheck = document.createElement('button');
+            timeCheck.className = 'cell-check';
+            timeCheck.dataset.row = rowIndex;
+            timeCheck.dataset.checkCol = '0';
+            const isTimeChecked = row.checks && row.checks[0];
+            timeCheck.innerHTML = isTimeChecked
+                ? '<i class="fas fa-circle-check" style="color:#22c55e;font-size:14px;"></i>'
+                : '<i class="far fa-circle" style="color:#d1d5db;font-size:14px;"></i>';
+            timeCell.style.position = 'relative';
             timeCell.appendChild(timeDiv);
+            timeCell.appendChild(timeCheck);
             tr.appendChild(timeCell);
 
             // Colunas Dias (0 a 6)
@@ -378,7 +395,18 @@
                 if (row.color && row.color[dayIndex]) div.style.color = row.color[dayIndex];
                 if (row.align && row.align[dayIndex]) div.style.textAlign = row.align[dayIndex];
 
+                // Botão check da coluna dia (posição dayIndex+1)
+                const checkBtn = document.createElement('button');
+                checkBtn.className = 'cell-check';
+                checkBtn.dataset.row = rowIndex;
+                checkBtn.dataset.checkCol = String(dayIndex + 1);
+                const isChecked = row.checks && row.checks[dayIndex + 1];
+                checkBtn.innerHTML = isChecked
+                    ? '<i class="fas fa-circle-check" style="color:#22c55e;font-size:14px;"></i>'
+                    : '<i class="far fa-circle" style="color:#d1d5db;font-size:14px;"></i>';
+                td.style.position = 'relative';
                 td.appendChild(div);
+                td.appendChild(checkBtn);
                 tr.appendChild(td);
             });
 
@@ -428,7 +456,8 @@
                 days: Array(7).fill(''),
                 timeBg: '', bg: Array(7).fill(''),
                 timeColor: '', color: Array(7).fill(''),
-                timeAlign: 'center', align: Array(7).fill('')
+                timeAlign: 'center', align: Array(7).fill(''),
+                checks: Array(8).fill(false)
             };
             scheduleData.push(newRow);
             renderTable(scheduleData);
@@ -680,6 +709,39 @@
     if(alignRightBtn) alignRightBtn.onclick = () => applyStyle('textAlign', 'right');
     if(undoBtn) undoBtn.onclick = undo;
 
+    // --- CHECKS ---
+    scheduleBody.addEventListener('click', (e) => {
+        const btn = e.target.closest('.cell-check');
+        if (!btn) return;
+
+        const row = parseInt(btn.dataset.row);
+        const col = parseInt(btn.dataset.checkCol);
+
+        if (!scheduleData[row].checks) scheduleData[row].checks = Array(8).fill(false);
+
+        // Alterna o estado
+        scheduleData[row].checks[col] = !scheduleData[row].checks[col];
+        const checked = scheduleData[row].checks[col];
+
+        // Atualiza o ícone sem re-renderizar a tabela inteira
+        btn.innerHTML = checked
+            ? '<i class="fas fa-circle-check" style="color:#22c55e;font-size:14px;"></i>'
+            : '<i class="far fa-circle" style="color:#d1d5db;font-size:14px;"></i>';
+
+        debouncedSave();
+    });
+
+    const clearChecksBtn = document.getElementById('clearChecksBtn');
+    if (clearChecksBtn) {
+        clearChecksBtn.addEventListener('click', () => {
+            if (!confirm("Deseja limpar todos os checks marcados?")) return;
+            pushSnapshot();
+            scheduleData.forEach(row => { row.checks = Array(8).fill(false); });
+            renderTable(scheduleData);
+            saveToFirebase();
+        });
+    }
+    
     // --- DRAG AND DROP ---
     function bindDragHandlers() {
         const handles = scheduleBody.querySelectorAll('.drag-handle');
