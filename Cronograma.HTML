@@ -49,6 +49,15 @@
                     </div>
                     <button id="applyFillBtn" class="text-xs font-medium text-gray-600 hover:text-sky-600 px-2 py-1 rounded hover:bg-gray-100">Pintar</button>
                 </div>
+
+                <button id="applyFillBtn" class="text-xs font-medium text-gray-600 hover:text-sky-600 px-2 py-1 rounded hover:bg-gray-100">Pintar</button>
+                    
+                    <!-- Fileira de cores favoritas -->
+                    <div class="flex items-center gap-1 mt-1 w-full pt-1 border-t border-gray-100" id="favColorsRow">
+                        <!-- As bolinhas serão geradas pelo JavaScript -->
+                    </div>
+                </div>
+
                 <div class="flex gap-1 pr-3 border-r border-gray-100">
                     <button id="alignLeftBtn" class="tool-btn"><i class="fas fa-align-left"></i></button>
                     <button id="alignCenterBtn" class="tool-btn"><i class="fas fa-align-center"></i></button>
@@ -147,6 +156,12 @@
     let isMouseDownForSelect = false;
     let focusedCell = null; // Guarda a célula onde o cursor está no momento
 
+    // 10 cores favoritas padrão
+    let favColors = [
+        '#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6',
+        '#8b5cf6', '#ec4899', '#000000', '#6b7280', '#ffffff'
+    ];
+
     // --- AUTHENTICATION ---
     onAuthStateChanged(auth, (user) => {
         if (user) {
@@ -155,6 +170,7 @@
             manualSaveBtn.classList.remove('hidden'); // Mostra botão de salvar manual
             setStatus('loading', 'Sincronizando...');
             loadFromFirebase();
+            loadFavColors();
         } else {
             console.warn("⚠️ Usuário não logado.");
             currentUserUID = null;
@@ -475,6 +491,93 @@
                 clearSelection();
             }
         });
+    }
+
+    // --- CORES FAVORITAS ---
+    function renderFavColors() {
+        const row = document.getElementById('favColorsRow');
+        if (!row) return;
+        row.innerHTML = '';
+
+        favColors.forEach((color, index) => {
+            const btn = document.createElement('button');
+            btn.title = `Cor favorita ${index + 1} — clique direito para trocar`;
+            btn.style.cssText = `
+                width: 20px; height: 20px; border-radius: 50%;
+                background-color: ${color};
+                border: 2px solid #d1d5db;
+                cursor: pointer; flex-shrink: 0;
+                transition: transform 0.1s, border-color 0.1s;
+            `;
+
+            // Clique esquerdo: preenche os dois seletores de cor
+            btn.addEventListener('click', () => {
+                textColorPicker.value = color;
+                fillColorPicker.value = color;
+            });
+
+            // Clique direito: abre seletor para trocar a cor favorita
+            btn.addEventListener('contextmenu', (e) => {
+                e.preventDefault();
+                const input = document.createElement('input');
+                input.type = 'color';
+                input.value = color;
+                input.style.position = 'fixed';
+                input.style.opacity = '0';
+                input.style.pointerEvents = 'none';
+                document.body.appendChild(input);
+                input.click();
+                input.addEventListener('change', () => {
+                    favColors[index] = input.value;
+                    renderFavColors();
+                    saveFavColors();
+                    document.body.removeChild(input);
+                });
+                // Remove o input se o usuário cancelar
+                input.addEventListener('blur', () => {
+                    setTimeout(() => {
+                        if (document.body.contains(input)) document.body.removeChild(input);
+                    }, 300);
+                });
+            });
+
+            // Efeito hover
+            btn.addEventListener('mouseenter', () => {
+                btn.style.transform = 'scale(1.25)';
+                btn.style.borderColor = '#6b7280';
+            });
+            btn.addEventListener('mouseleave', () => {
+                btn.style.transform = 'scale(1)';
+                btn.style.borderColor = '#d1d5db';
+            });
+
+            row.appendChild(btn);
+        });
+    }
+
+    async function saveFavColors() {
+        if (!currentUserUID) return;
+        try {
+            await set(ref(db, `users/${currentUserUID}/favColors`), favColors);
+        } catch (e) {
+            console.error("Erro ao salvar cores favoritas:", e);
+        }
+    }
+
+    async function loadFavColors() {
+        if (!currentUserUID) return;
+        try {
+            const snapshot = await get(ref(db, `users/${currentUserUID}/favColors`));
+            if (snapshot.exists()) {
+                const data = snapshot.val();
+                if (Array.isArray(data) && data.length === 10) {
+                    favColors = data;
+                }
+            }
+        } catch (e) {
+            console.error("Erro ao carregar cores favoritas:", e);
+        }
+        renderFavColors();
     }
 
     // --- STYLES ---
