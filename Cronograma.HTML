@@ -468,40 +468,53 @@
 
     // --- STYLES ---
     function applyStyle(action, value = null) {
-        pushSnapshot();
-        const targets = selectedCells.size > 0 ? Array.from(selectedCells) : [];
-        
-        if(targets.length === 0 && !value) {
-            document.execCommand(action, false, null);
+        // Verifica se há células selecionadas
+        const targets = Array.from(selectedCells);
+
+        if (targets.length === 0) {
+            alert("⚠️ Selecione ao menos uma célula antes de aplicar o estilo.");
             return;
         }
-        
+
+        pushSnapshot();
+
         targets.forEach(el => {
             const row = el.dataset.row;
             const col = el.dataset.col;
-            
-            if(action === 'color') {
+
+            if (action === 'color') {
                 el.style.color = value;
-                if(col === 'time') scheduleData[row].timeColor = value;
+                if (col === 'time') scheduleData[row].timeColor = value;
                 else scheduleData[row].color[col] = value;
-            } else if(action === 'background') {
+
+            } else if (action === 'background') {
                 const td = el.closest('td');
-                if(td) td.style.backgroundColor = value;
-                if(col === 'time') scheduleData[row].timeBg = value;
+                if (td) td.style.backgroundColor = value;
+                if (col === 'time') scheduleData[row].timeBg = value;
                 else scheduleData[row].bg[col] = value;
-            } else if(action === 'textAlign') {
+
+            } else if (action === 'textAlign') {
                 el.style.textAlign = value;
-                if(col === 'time') scheduleData[row].timeAlign = value;
+                if (col === 'time') scheduleData[row].timeAlign = value;
                 else scheduleData[row].align[col] = value;
+
+            } else if (action === 'bold') {
+                // Aplica negrito via execCommand dentro da célula focada
+                el.focus();
+                document.execCommand('bold', false, null);
+                if (col === 'time') scheduleData[row].time = el.innerHTML;
+                else scheduleData[row].days[col] = el.innerHTML;
+
+            } else if (action === 'underline') {
+                el.focus();
+                document.execCommand('underline', false, null);
+                if (col === 'time') scheduleData[row].time = el.innerHTML;
+                else scheduleData[row].days[col] = el.innerHTML;
             }
         });
 
-        if(targets.length > 0) {
-            setStatus('saving', 'Salvando estilo...');
-            debouncedSave();
-        } else {
-             document.execCommand(action);
-        }
+        setStatus('saving', 'Salvando estilo...');
+        debouncedSave();
     }
 
     if(boldBtn) boldBtn.onclick = () => applyStyle('bold');
