@@ -145,6 +145,7 @@
     let multiSelectMode = false;
     const selectedCells = new Set();
     let isMouseDownForSelect = false;
+    let focusedCell = null; // Guarda a célula onde o cursor está no momento
 
     // --- AUTHENTICATION ---
     onAuthStateChanged(auth, (user) => {
@@ -429,6 +430,16 @@
         }
     });
 
+    // Rastreia qual célula está com o cursor/foco no momento
+    scheduleBody.addEventListener('focusin', (e) => {
+        const el = e.target.closest('.editable-content');
+        if (el) focusedCell = el;
+    });
+    scheduleBody.addEventListener('focusout', (e) => {
+        // Pequeno delay para não perder o foco ao clicar nos botões da toolbar
+        setTimeout(() => { focusedCell = null; }, 200);
+    });
+
     scheduleBody.addEventListener('mousedown', (e) => {
         const el = e.target.closest('.editable-content');
         if(!el) return;
@@ -468,11 +479,15 @@
 
     // --- STYLES ---
     function applyStyle(action, value = null) {
-        // Verifica se há células selecionadas
-        const targets = Array.from(selectedCells);
+        // Define os alvos: multi-seleção, ou célula com foco, ou aviso
+        let targets = Array.from(selectedCells);
+
+        if (targets.length === 0 && focusedCell) {
+            targets = [focusedCell];
+        }
 
         if (targets.length === 0) {
-            alert("⚠️ Selecione ao menos uma célula antes de aplicar o estilo.");
+            alert("⚠️ Clique em uma célula ou use Multi-seleção antes de aplicar o estilo.");
             return;
         }
 
@@ -499,7 +514,6 @@
                 else scheduleData[row].align[col] = value;
 
             } else if (action === 'bold') {
-                // Aplica negrito via execCommand dentro da célula focada
                 el.focus();
                 document.execCommand('bold', false, null);
                 if (col === 'time') scheduleData[row].time = el.innerHTML;
