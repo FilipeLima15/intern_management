@@ -36,25 +36,29 @@
                     <button id="boldBtn" class="tool-btn" title="Negrito (Ctrl+B)"><i class="fas fa-bold"></i></button>
                     <button id="underlineBtn" class="tool-btn" title="Sublinhado (Ctrl+U)"><i class="fas fa-underline"></i></button>
                 </div>
-                <div class="flex gap-2 items-center pr-3 border-r border-gray-100">
+                <div class="flex gap-2 items-center pr-3 border-r border-gray-100" style="position:relative;">
                     <div class="flex items-center gap-1" title="Cor do Texto">
                         <i class="fa-solid fa-font text-gray-400 text-xs"></i>
                         <input type="color" id="textColorPicker" value="#000000">
                     </div>
                     <button id="applyTextColorBtn" class="text-xs font-medium text-gray-600 hover:text-sky-600 px-2 py-1 rounded hover:bg-gray-100">Aplicar</button>
+                    <!-- Painel flutuante: cores favoritas de TEXTO -->
+                    <div id="favTextPanel" style="display:none; position:absolute; top:100%; left:0; z-index:999; background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:8px; box-shadow:0 4px 16px rgba(0,0,0,0.13); margin-top:4px;">
+                        <div class="text-xs text-gray-400 mb-1 font-medium">Cores favoritas — Texto</div>
+                        <div id="favTextColors" class="flex flex-wrap gap-1" style="width:116px;"></div>
+                        <div class="text-xs text-gray-300 mt-1">Clique direito para trocar</div>
+                    </div>
                     <div class="w-px h-6 bg-gray-100 mx-1"></div>
                     <div class="flex items-center gap-1" title="Cor de Fundo">
                         <i class="fa-solid fa-fill-drip text-gray-400 text-xs"></i>
                         <input type="color" id="fillColorPicker" value="#eef2ff">
                     </div>
                     <button id="applyFillBtn" class="text-xs font-medium text-gray-600 hover:text-sky-600 px-2 py-1 rounded hover:bg-gray-100">Pintar</button>
-                </div>
-
-                <button id="applyFillBtn" class="text-xs font-medium text-gray-600 hover:text-sky-600 px-2 py-1 rounded hover:bg-gray-100">Pintar</button>
-                    
-                    <!-- Fileira de cores favoritas -->
-                    <div class="flex items-center gap-1 mt-1 w-full pt-1 border-t border-gray-100" id="favColorsRow">
-                        <!-- As bolinhas serão geradas pelo JavaScript -->
+                    <!-- Painel flutuante: cores favoritas de FUNDO -->
+                    <div id="favFillPanel" style="display:none; position:absolute; top:100%; left:0; z-index:999; background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:8px; box-shadow:0 4px 16px rgba(0,0,0,0.13); margin-top:4px;">
+                        <div class="text-xs text-gray-400 mb-1 font-medium">Cores favoritas — Fundo</div>
+                        <div id="favFillColors" class="flex flex-wrap gap-1" style="width:116px;"></div>
+                        <div class="text-xs text-gray-300 mt-1">Clique direito para trocar</div>
                     </div>
                 </div>
 
@@ -156,10 +160,14 @@
     let isMouseDownForSelect = false;
     let focusedCell = null; // Guarda a célula onde o cursor está no momento
 
-    // 10 cores favoritas padrão
-    let favColors = [
+    // Cores favoritas separadas para texto e fundo
+    let favTextColors = [
         '#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6',
         '#8b5cf6', '#ec4899', '#000000', '#6b7280', '#ffffff'
+    ];
+    let favFillColors = [
+        '#fef2f2', '#fff7ed', '#fefce8', '#f0fdf4', '#eff6ff',
+        '#f5f3ff', '#fdf4ff', '#f9fafb', '#e5e7eb', '#ffffff'
     ];
 
     // --- AUTHENTICATION ---
@@ -494,14 +502,16 @@
     }
 
     // --- CORES FAVORITAS ---
-    function renderFavColors() {
-        const row = document.getElementById('favColorsRow');
-        if (!row) return;
-        row.innerHTML = '';
 
-        favColors.forEach((color, index) => {
+    // Cria as bolinhas dentro de um painel
+    function renderFavPanel(colors, containerId, pickerEl, type) {
+        const container = document.getElementById(containerId);
+        if (!container) return;
+        container.innerHTML = '';
+
+        colors.forEach((color, index) => {
             const btn = document.createElement('button');
-            btn.title = `Cor favorita ${index + 1} — clique direito para trocar`;
+            btn.title = `Favorita ${index + 1} — clique direito para trocar`;
             btn.style.cssText = `
                 width: 20px; height: 20px; border-radius: 50%;
                 background-color: ${color};
@@ -510,55 +520,79 @@
                 transition: transform 0.1s, border-color 0.1s;
             `;
 
-            // Clique esquerdo: preenche os dois seletores de cor
-            btn.addEventListener('click', () => {
-                textColorPicker.value = color;
-                fillColorPicker.value = color;
+            // Clique esquerdo: preenche o picker E aplica na célula
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                pickerEl.value = color;
+                // Aplica direto na célula
+                if (type === 'text') applyStyle('color', color);
+                else applyStyle('background', color);
+                closeFavPanels();
             });
 
-            // Clique direito: abre seletor para trocar a cor favorita
+            // Clique direito: troca a cor favorita
             btn.addEventListener('contextmenu', (e) => {
                 e.preventDefault();
+                e.stopPropagation();
                 const input = document.createElement('input');
                 input.type = 'color';
                 input.value = color;
-                input.style.position = 'fixed';
-                input.style.opacity = '0';
-                input.style.pointerEvents = 'none';
+                input.style.cssText = 'position:fixed;opacity:0;pointer-events:none;';
                 document.body.appendChild(input);
                 input.click();
                 input.addEventListener('change', () => {
-                    favColors[index] = input.value;
-                    renderFavColors();
+                    if (type === 'text') favTextColors[index] = input.value;
+                    else favFillColors[index] = input.value;
+                    renderFavPanel(type === 'text' ? favTextColors : favFillColors, containerId, pickerEl, type);
                     saveFavColors();
                     document.body.removeChild(input);
                 });
-                // Remove o input se o usuário cancelar
                 input.addEventListener('blur', () => {
-                    setTimeout(() => {
-                        if (document.body.contains(input)) document.body.removeChild(input);
-                    }, 300);
+                    setTimeout(() => { if (document.body.contains(input)) document.body.removeChild(input); }, 300);
                 });
             });
 
-            // Efeito hover
-            btn.addEventListener('mouseenter', () => {
-                btn.style.transform = 'scale(1.25)';
-                btn.style.borderColor = '#6b7280';
-            });
-            btn.addEventListener('mouseleave', () => {
-                btn.style.transform = 'scale(1)';
-                btn.style.borderColor = '#d1d5db';
-            });
+            btn.addEventListener('mouseenter', () => { btn.style.transform = 'scale(1.25)'; btn.style.borderColor = '#6b7280'; });
+            btn.addEventListener('mouseleave', () => { btn.style.transform = 'scale(1)'; btn.style.borderColor = '#d1d5db'; });
 
-            row.appendChild(btn);
+            container.appendChild(btn);
         });
     }
+
+    function closeFavPanels() {
+        document.getElementById('favTextPanel').style.display = 'none';
+        document.getElementById('favFillPanel').style.display = 'none';
+    }
+
+    // Abre/fecha painel ao clicar no input de cor
+    textColorPicker.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const panel = document.getElementById('favTextPanel');
+        const isOpen = panel.style.display !== 'none';
+        closeFavPanels();
+        if (!isOpen) panel.style.display = 'block';
+    });
+
+    fillColorPicker.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const panel = document.getElementById('favFillPanel');
+        const isOpen = panel.style.display !== 'none';
+        closeFavPanels();
+        if (!isOpen) panel.style.display = 'block';
+    });
+
+    // Fecha ao clicar fora
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('#favTextPanel') && !e.target.closest('#favFillPanel')) {
+            closeFavPanels();
+        }
+    });
 
     async function saveFavColors() {
         if (!currentUserUID) return;
         try {
-            await set(ref(db, `users/${currentUserUID}/favColors`), favColors);
+            await set(ref(db, `users/${currentUserUID}/favTextColors`), favTextColors);
+            await set(ref(db, `users/${currentUserUID}/favFillColors`), favFillColors);
         } catch (e) {
             console.error("Erro ao salvar cores favoritas:", e);
         }
@@ -567,18 +601,21 @@
     async function loadFavColors() {
         if (!currentUserUID) return;
         try {
-            const snapshot = await get(ref(db, `users/${currentUserUID}/favColors`));
-            if (snapshot.exists()) {
-                const data = snapshot.val();
-                if (Array.isArray(data) && data.length === 10) {
-                    favColors = data;
-                }
-            }
+            const snapText = await get(ref(db, `users/${currentUserUID}/favTextColors`));
+            if (snapText.exists() && Array.isArray(snapText.val()) && snapText.val().length === 10)
+                favTextColors = snapText.val();
+
+            const snapFill = await get(ref(db, `users/${currentUserUID}/favFillColors`));
+            if (snapFill.exists() && Array.isArray(snapFill.val()) && snapFill.val().length === 10)
+                favFillColors = snapFill.val();
+
         } catch (e) {
             console.error("Erro ao carregar cores favoritas:", e);
         }
-        renderFavColors();
-    }
+        // Renderiza os dois painéis
+        renderFavPanel(favTextColors, 'favTextColors', textColorPicker, 'text');
+        renderFavPanel(favFillColors, 'favFillColors', fillColorPicker, 'fill');
+    }    
 
     // --- STYLES ---
     function applyStyle(action, value = null) {
