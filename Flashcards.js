@@ -1793,8 +1793,9 @@ window.openDeckConfig = function(deckName, ev) {
     document.getElementById('targetNameDisplay').innerText = deckName;
     window.switchConfigTab('settings'); 
 
-    // Defaults Atualizados (Incluindo Errei = 0.5 horas)
+    // Defaults Atualizados (Incluindo Errei = 0.5 horas e modo de tempo)
     const defaults = { 
+        timeMode: 'crescente', // NOVO: 'fixo' ou 'crescente'
         againInterval: 0.5, againIntervalUnit: 'hours', // NOVO: Padrão 30 min (0.5h)
         easyBonus: 3.5, easyBonusUnit: 'days', 
         goodInterval: 2.8, goodIntervalUnit: 'days', 
@@ -1802,6 +1803,11 @@ window.openDeckConfig = function(deckName, ev) {
         maxInterval: 180 
     };
     const settings = deckSettings[deckName] || defaults;
+
+    // NOVO: Preenche o seletor de Modo de Tempo (Fixo x Crescente)
+    if (document.getElementById('cfgTimeMode')) {
+        document.getElementById('cfgTimeMode').value = settings.timeMode || 'crescente';
+    }
     
     // Preenche o campo 'Errei' (Verifica se o elemento existe no HTML primeiro para evitar erro)
     if(document.getElementById('cfgAgainInterval')) {
@@ -1847,6 +1853,9 @@ window.applyPreset = function(type) {
 };
 
 window.saveDeckConfig = async function() {
+    // NOVO: lê o modo de tempo escolhido (fixo ou crescente)
+    const timeMode = document.getElementById('cfgTimeMode')?.value || 'crescente';
+
     // Leitura dos valores com segurança
     const againVal = parseFloat(document.getElementById('cfgAgainInterval')?.value) || 0.5;
     const againUnit = document.getElementById('unitAgainInterval')?.value || 'hours';
@@ -1861,6 +1870,7 @@ window.saveDeckConfig = async function() {
 
     // Atualiza na memória (mantém o nome original legível para o app)
     deckSettings[currentDeckName] = { 
+        timeMode: timeMode,
         againInterval: againVal, againIntervalUnit: againUnit,
         easyBonus: easy, easyBonusUnit: easyUnit,
         goodInterval: good, goodIntervalUnit: goodUnit,
@@ -1921,10 +1931,14 @@ function renderDeckHistory() {
     const tbody = document.getElementById('deckHistoryBody');
     tbody.innerHTML = '';
     
-    const cards = Object.values(allCards).filter(c => 
-        c.deck === currentDeckName && 
-        (c.category || 'conteudo') === currentCategoryFilter
-    );
+    // Bug 4: monta cada card já com sua chave (firebaseKey), tornando o
+    // botão de editar do histórico confiável e independente de getCardKey.
+    const cards = Object.keys(allCards)
+        .map(key => ({ ...allCards[key], firebaseKey: key }))
+        .filter(c =>
+            c.deck === currentDeckName &&
+            (c.category || 'conteudo') === currentCategoryFilter
+        );
     
     // Ordena pela última revisão (mais recente primeiro)
     cards.sort((a,b) => (b.lastReview || 0) - (a.lastReview || 0));
@@ -1953,11 +1967,11 @@ function renderDeckHistory() {
             else nextRevStr = new Date(card.nextReview).toLocaleDateString('pt-BR', {day:'2-digit', month:'2-digit'});
         }
 
-        // MELHORIA: Mostra mais texto e remove tags HTML
-        let plainFront = card.front.replace(/<[^>]*>?/gm, '');
+        // MELHORIA: Mostra mais texto e remove tags HTML (protegido contra card sem texto)
+        let plainFront = (card.front || '').replace(/<[^>]*>?/gm, '');
         if(plainFront.length > 60) plainFront = plainFront.substring(0, 60) + '...';
         
-        const btnEdit = `<button onclick="window.editCardFromHistory('${card.firebaseKey || getCardKey(card)}')" class="w-7 h-7 flex items-center justify-center rounded-full text-gray-400 hover:text-sky-600 hover:bg-sky-50 transition" title="Editar"><i class="fa-solid fa-pen text-xs"></i></button>`;
+        const btnEdit = `<button onclick="window.editCardFromHistory('${card.firebaseKey}')" class="w-7 h-7 flex items-center justify-center rounded-full text-gray-400 hover:text-sky-600 hover:bg-sky-50 transition" title="Editar"><i class="fa-solid fa-pen text-xs"></i></button>`;
 
         tr.innerHTML = `
             <td class="p-3">
@@ -2014,28 +2028,9 @@ window.adjustTime = function(amount) {
     input.value = val;
 };
 
-window.confirmTimerStart = function() {
-    let seconds = 0;
-    
-    if (studyTimerMode === 'timer') {
-        const mins = parseInt(document.getElementById('inputTimerMinutes').value) || 25;
-        seconds = mins * 60;
-    } else {
-        seconds = 0; // Stopwatch starts at 0, None uses 0
-    }
-    
-    document.getElementById('timerConfigModal').classList.add('hidden');
-    
-    // Inicia a sessão REAL
-    startStudySession(pendingDeckName, pendingIsCramming);
-    
-    // Inicia o Timer se não for 'none'
-    if (studyTimerMode !== 'none') {
-        initStudyTimer(studyTimerMode, seconds);
-    } else {
-        document.getElementById('studyTimerContainer').classList.add('hidden');
-    }
-};
+// OBS: a função window.confirmTimerStart estava definida DUAS vezes.
+// A versão duplicada (antiga) foi removida daqui. A versão única e completa,
+// que também trata sessões compartilhadas, fica mais abaixo no arquivo.
 
 function initStudyTimer(mode, startSeconds) {
     studyTimerSeconds = startSeconds;
@@ -2196,7 +2191,7 @@ function showCurrentCard() {
     const feedbackDisplay = document.getElementById('objectiveFeedbackDisplay');
     const hint = document.getElementById('tapToRevealHint');
     
-    const btns = objActions.querySelectorAll('button');
+    const btns = objActions ? objActions.querySelectorAll('button') : [];
     btns.forEach(b => {
         b.disabled = false; 
         b.classList.remove('opacity-50', 'cursor-not-allowed');
@@ -2213,21 +2208,23 @@ function showCurrentCard() {
     }
 
     if (card.format === 'objective') {
-        objActions.classList.remove('hidden');
-        hint.classList.add('hidden'); 
+        if (objActions) objActions.classList.remove('hidden');
+        if (hint) hint.classList.add('hidden'); 
     } else {
-        objActions.classList.add('hidden');
-        hint.classList.remove('hidden');
+        if (objActions) objActions.classList.add('hidden');
+        if (hint) hint.classList.remove('hidden');
     }
 
-    // --- LÓGICA DE CÁLCULO DOS BOTÕES (CORRIGIDA) ---
+    // --- LÓGICA DE CÁLCULO DOS BOTÕES (CORRIGIDA + MODO FIXO/CRESCENTE) ---
     const defaults = { 
+        timeMode: 'crescente',
         againInterval: 0.5, againIntervalUnit: 'hours',
         easyBonus: 3.5, easyBonusUnit: 'days', 
         goodInterval: 2.8, goodIntervalUnit: 'days', 
         hardInterval: 1.2, hardIntervalUnit: 'days' 
     };
     const s = deckSettings[currentDeckName] || defaults;
+    const timeMode = s.timeMode || 'crescente'; // NOVO: modo de tempo do baralho
     
     // Helper para converter tudo para dias
     const getDays = (val, unit) => unit === 'minutes' ? val/1440 : (unit === 'hours' ? val/24 : val);
@@ -2242,19 +2239,25 @@ function showCurrentCard() {
     // Variáveis para exibição
     let valHard, valGood, valEasy;
 
-    if (currentInt === 0) {
-        // Card Novo: Usa o valor base da configuração
+    if (timeMode === 'fixo') {
+        // MODO FIXO: o tempo é sempre o valor configurado (previsível)
         valHard = sHard;
         valGood = sGood;
         valEasy = sEasy;
     } else {
-        // Revisão: Multiplica o intervalo atual pelo fator
-        valHard = currentInt * s.hardInterval; 
-        valGood = currentInt * s.goodInterval;
-        valEasy = currentInt * s.easyBonus;   
+        // MODO CRESCENTE: card novo usa o valor base; revisão multiplica o intervalo atual
+        if (currentInt === 0) {
+            valHard = sHard;
+            valGood = sGood;
+            valEasy = sEasy;
+        } else {
+            valHard = currentInt * s.hardInterval; 
+            valGood = currentInt * s.goodInterval;
+            valEasy = currentInt * s.easyBonus;   
+        }
     }
     
-    // Errei é sempre fixo (Reset)
+    // Errei é sempre fixo (Reset), independente do modo
     const valAgain = sAgain; 
 
     // Atualiza os textos dos botões usando a nova formatTime
@@ -2337,8 +2340,6 @@ window.revealCard = function(forceReveal = false) {
 // Mantém o alias
 window.flipCard = window.revealCard;
 
-window.flipCard = window.revealCard;
-
 window.rateCard = async function(rating) {
     const card = studyQueue[currentCardIndex];
     if(!card) {
@@ -2351,6 +2352,7 @@ window.rateCard = async function(rating) {
     
     // Busca configurações ou usa defaults
     const defaults = { 
+        timeMode: 'crescente',
         againInterval: 0.5, againIntervalUnit: 'hours',
         easyBonus: 3.5, easyBonusUnit: 'days', 
         goodInterval: 2.8, goodIntervalUnit: 'days', 
@@ -2358,6 +2360,7 @@ window.rateCard = async function(rating) {
         maxInterval: 180 
     };
     const s = (deckSettings && deckSettings[currentDeckName]) ? deckSettings[currentDeckName] : defaults;
+    const timeMode = s.timeMode || 'crescente'; // NOVO: modo de tempo do baralho
     
     // Helper de conversão
     const getDays = (val, unit) => unit === 'minutes' ? val/1440 : (unit === 'hours' ? val/24 : val);
@@ -2375,13 +2378,26 @@ window.rateCard = async function(rating) {
     // --- CÁLCULO FINAL (Matemática aplicada) ---
     
     if (rating === 'again') { 
-        nextInterval = sAgain; // Reseta para o valor fixo (ex: 0.02 dias = 30min)
+        nextInterval = sAgain; // Reseta para o valor fixo (ex: 0.5h = 30min)
         nextEase = Math.max(1.3, nextEase - 0.2); 
     }
-    else {
-        // Se NÃO é 'again', verifica se é card NOVO (0) ou REVISÃO
+    else if (timeMode === 'fixo') {
+        // --- MODO FIXO: o intervalo é SEMPRE o valor configurado ---
         if (rating === 'hard') {
-            // Se novo, usa valor base. Se revisão, multiplica.
+            nextInterval = sHard;
+            nextEase = Math.max(1.3, nextEase - 0.15);
+        }
+        else if (rating === 'good') {
+            nextInterval = sGood;
+        }
+        else if (rating === 'easy') {
+            nextInterval = sEasy;
+            nextEase += 0.15;
+        }
+    }
+    else {
+        // --- MODO CRESCENTE: card novo usa base; revisão multiplica o intervalo atual ---
+        if (rating === 'hard') {
             nextInterval = (currentInt === 0) ? sHard : (currentInt * s.hardInterval);
             nextEase = Math.max(1.3, nextEase - 0.15); 
         }
@@ -2517,7 +2533,7 @@ window.renderManagerList = function() {
             tr.className = "border-b border-gray-100 hover:bg-gray-50 transition";
         }
         
-        const previewFront = card.front.replace(/<[^>]*>?/gm, '').substring(0, 50) + '...';
+        const previewFront = (card.front || '').replace(/<[^>]*>?/gm, '').substring(0, 50) + '...';
         
         let typeBadge = card.category === 'jurisprudencia' ? '<span class="text-[9px] bg-pink-100 text-pink-600 px-2 py-0.5 rounded font-bold">JURIS</span>' : '<span class="text-[9px] bg-blue-100 text-blue-600 px-2 py-0.5 rounded font-bold">CONT</span>';
         if(card.imported) typeBadge += ' <span class="text-[9px] bg-emerald-100 text-emerald-600 px-2 py-0.5 rounded font-bold ml-1" title="Importado"><i class="fa-solid fa-file-import"></i></span>';

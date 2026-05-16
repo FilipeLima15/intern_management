@@ -450,6 +450,18 @@
                         <div class="text-gray-500 mt-4 space-y-4 animate-fade-in pl-1">
                             
                             <div>
+                                <label class="block text-[10px] font-bold text-gray-400 mb-1">Modo de Tempo do Baralho</label>
+                                <select id="cfgTimeMode" class="w-full border border-gray-200 p-2 rounded text-xs bg-gray-50 font-bold text-gray-600 outline-none focus:border-sky-400">
+                                    <option value="crescente">Crescente — o intervalo aumenta a cada acerto (recomendado)</option>
+                                    <option value="fixo">Fixo — o intervalo é sempre o valor configurado</option>
+                                </select>
+                                <p class="text-[9px] text-gray-400 mt-1 leading-tight">
+                                    <strong>Crescente:</strong> ideal para concurso; o que você domina some da frente sozinho.
+                                    <strong>Fixo:</strong> 100% previsível; o tempo é sempre o número abaixo.
+                                </p>
+                            </div>
+
+                            <div>
                                 <label class="block text-[10px] font-bold text-gray-400 mb-1">Intervalo do Errei</label>
                                 <div class="flex gap-2">
                                     <input type="number" id="cfgAgainInterval" step="0.1" class="w-full border border-gray-200 p-2 rounded text-xs outline-none focus:border-sky-400 font-mono text-gray-600">
