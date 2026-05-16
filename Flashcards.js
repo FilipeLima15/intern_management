@@ -13,6 +13,11 @@ let currentCategoryFilter = 'conteudo';
 let currentPathStack = [];
 let initialSessionLength = 0;
 
+// --- ETAPA 2: ESTADO DA SESSÃO DE ESTUDO ---
+let sessionHits = 0;   // Acertos na sessão atual (placar de fim de sessão)
+let sessionMiss = 0;   // Erros na sessão atual
+let lastActionStack = []; // Histórico de avaliações para o botão "Desfazer"
+
 // --- VARIÁVEIS PARA GERENCIADOR (AÇÕES EM MASSA) ---
 let selectedManagerCards = new Set();
 let isBatchMoveMode = false; // Flag para saber se estamos movendo em lote
@@ -239,6 +244,17 @@ style.innerHTML = `
 document.head.appendChild(style);
 
 console.log("🧠 Iniciando Anki Expert (Versão Final com Busca)...");
+
+// --- EMBARALHAMENTO CORRETO (Fisher-Yates) ---
+// O método antigo (sort com Math.random) não distribui de forma justa.
+// Esta função embaralha o array de verdade, sem viés. Altera e devolve o próprio array.
+function shuffleArray(arr) {
+    for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+}
 
 // --- COMPARTILHAMENTO ---
 
@@ -615,7 +631,7 @@ window.startSharedSession = async function(ownerUid, deckPath, role) {
             studyQueue = cards.filter(c => c.nextReview <= now || c.interval === 0);
         }
         
-        studyQueue.sort(() => Math.random() - 0.5);
+        shuffleArray(studyQueue);
 
         if (studyQueue.length === 0) {
             alert("Tudo em dia! Use o modo 'Revisar Tudo' se quiser praticar.");
@@ -623,6 +639,13 @@ window.startSharedSession = async function(ownerUid, deckPath, role) {
         }
 
         currentCardIndex = 0;
+        initialSessionLength = studyQueue.length;
+
+        // ETAPA 2: zera o placar e o histórico de desfazer ao começar a sessão
+        sessionHits = 0;
+        sessionMiss = 0;
+        lastActionStack = [];
+
         document.getElementById('deckTitleDisplay').innerText = deckPath.split('::').pop() + " (Compartilhado)";
         
         // Esconde botão de editar (já que o conteúdo é do dono, editar o texto é complexo neste modo)
@@ -1143,7 +1166,10 @@ function renderDecksView() {
                             </div>
                         </div>
 
-                        <div class="flex items-center">
+                        <div class="flex items-center gap-2">
+                            <button onclick="window.resetDeckCount('${info.fullPath}', event)" class="w-8 h-8 rounded-full bg-gray-50 text-gray-400 hover:bg-amber-100 hover:text-amber-600 hover:scale-110 transition flex items-center justify-center shadow-sm border border-gray-100" title="Resetar contagem de acertos/erros deste baralho">
+                                <i class="fa-solid fa-arrow-rotate-left text-xs"></i>
+                            </button>
                             ${sharedIconHTML} <div class="w-8 h-8 rounded-full ${isDue ? 'bg-sky-600 text-white shadow-md shadow-sky-200' : 'bg-gray-100 text-gray-300'} flex items-center justify-center transition-all transform group-hover:scale-110">
                                 <i class="fa-solid fa-play ml-0.5 text-xs"></i>
                             </div>
@@ -1223,13 +1249,18 @@ function startStudySession(deckName, isCramming) {
         studyQueue = isCramming ? cards : cards.filter(c => c.nextReview <= now || c.interval === 0);
     }
     
-    studyQueue.sort(() => Math.random() - 0.5);
+    shuffleArray(studyQueue);
 
     if (!studyQueue || studyQueue.length === 0) return alert("Não há cartas para revisar agora.");
 
     // NOVO: Define o tamanho total para a barra de progresso
     initialSessionLength = studyQueue.length;
     currentCardIndex = 0;
+
+    // ETAPA 2: zera o placar e o histórico de desfazer ao começar a sessão
+    sessionHits = 0;
+    sessionMiss = 0;
+    lastActionStack = [];
     
     // UI Updates...
     const mainHeader = document.getElementById('mainHeader');
@@ -1651,6 +1682,9 @@ window.saveCard = async function() {
             cardData.lastReview = existingCard.lastReview !== undefined ? existingCard.lastReview : 0;
             cardData.created = existingCard.created || Date.now();
             cardData.lastRating = existingCard.lastRating || null; // <--- AQUI ESTAVA O ERRO PRINCIPAL
+            // ETAPA 2: preserva os contadores de acerto/erro ao editar o card
+            cardData.hitCount = existingCard.hitCount || 0;
+            cardData.missCount = existingCard.missCount || 0;
             // --------------------------------------------------------
 
             await update(ref(db, `users/${currentUserUID}/anki/cards/${id}`), cardData); 
@@ -1684,6 +1718,8 @@ window.saveCard = async function() {
             cardData.created = Date.now(); 
             cardData.lastReview = 0; 
             cardData.lastRating = null;
+            cardData.hitCount = 0;  // ETAPA 2: contador de acertos
+            cardData.missCount = 0; // ETAPA 2: contador de erros
 
             await push(ref(db, `users/${currentUserUID}/anki/cards`), cardData); 
             alert("Criado!"); 
@@ -2154,9 +2190,49 @@ function formatTime(days) {
     return Math.round(days) + " dias";
 }
 
+// --- ETAPA 2: FINALIZA A SESSÃO MOSTRANDO O PLACAR DE ACERTOS/ERROS ---
+function finishStudySession() {
+    const viewStudy = document.getElementById('viewStudy');
+    const viewDecks = document.getElementById('viewDecks');
+    const viewEmpty = document.getElementById('viewEmpty');
+
+    if (viewStudy) viewStudy.classList.add('hidden');
+    if (viewDecks) viewDecks.classList.add('hidden');
+    if (viewEmpty) viewEmpty.classList.remove('hidden');
+
+    // Preenche o placar (se os elementos existirem no HTML)
+    const total = sessionHits + sessionMiss;
+    const elScore = document.getElementById('sessionScoreText');
+    const elHits = document.getElementById('sessionScoreHits');
+    const elMiss = document.getElementById('sessionScoreMiss');
+
+    if (elHits) elHits.innerText = sessionHits;
+    if (elMiss) elMiss.innerText = sessionMiss;
+    if (elScore) {
+        if (total > 0) {
+            const pct = Math.round((sessionHits / total) * 100);
+            elScore.innerText = `Você acertou ${sessionHits} de ${total} (${pct}%).`;
+        } else {
+            elScore.innerText = "Sessão finalizada.";
+        }
+    }
+}
+
+// --- ETAPA 2: HABILITA/DESABILITA O BOTÃO DESFAZER ---
+function updateUndoButton() {
+    const btnUndo = document.getElementById('btnUndoRating');
+    if (!btnUndo) return;
+    if (lastActionStack.length > 0) {
+        btnUndo.classList.remove('hidden');
+    } else {
+        btnUndo.classList.add('hidden');
+    }
+}
+
 function showCurrentCard() {
     if (!studyQueue || studyQueue.length === 0 || currentCardIndex >= studyQueue.length) {
-        window.showDecksView();
+        // ETAPA 2: em vez de voltar direto, mostra a tela final com o placar
+        finishStudySession();
         return; 
     }
 
@@ -2166,6 +2242,9 @@ function showCurrentCard() {
         showCurrentCard();
         return;
     }
+
+    // ETAPA 2: atualiza o botão Desfazer (só fica ativo se houver o que desfazer)
+    updateUndoButton();
 
     // ATUALIZA BARRA DE PROGRESSO
     const progressEl = document.getElementById('sessionProgressBar');
@@ -2429,9 +2508,20 @@ window.rateCard = async function(rating) {
             lastRating: rating
         };
 
+        // ETAPA 2 - CONTADOR DE ACERTOS/ERROS
+        // Regra: "Errei" = erro; "Difícil", "Bom" e "Fácil" = acerto.
+        const isMiss = (rating === 'again');
+        // Valores anteriores guardados (para o botão Desfazer reverter)
+        const prevHitCount = card.hitCount || 0;
+        const prevMissCount = card.missCount || 0;
+
         if (sharedSessionOwner) {
             updates[`users/${currentUserUID}/anki/shared_progress/${sharedSessionOwner}/${card.firebaseKey}`] = progressData;
         } else {
+            // Contadores só são gravados nos baralhos próprios do usuário
+            progressData.hitCount = isMiss ? prevHitCount : (prevHitCount + 1);
+            progressData.missCount = isMiss ? (prevMissCount + 1) : prevMissCount;
+
             const updatedCard = { ...card, ...progressData };
             updates[`users/${currentUserUID}/anki/cards/${card.firebaseKey}`] = updatedCard;
             
@@ -2442,6 +2532,20 @@ window.rateCard = async function(rating) {
         }
 
         await update(ref(db), updates);
+
+        // ETAPA 2 - PLACAR DA SESSÃO
+        if (isMiss) sessionMiss++; else sessionHits++;
+
+        // ETAPA 2 - REGISTRO PARA O BOTÃO DESFAZER
+        // Guarda o que era preciso para reverter esta avaliação.
+        lastActionStack.push({
+            indexBefore: currentCardIndex,
+            firebaseKey: card.firebaseKey,
+            isMiss: isMiss,
+            cardSnapshot: { ...card }, // estado do card ANTES da avaliação
+            sharedSessionOwner: sharedSessionOwner
+        });
+
         currentCardIndex++;
         showCurrentCard();
         
@@ -2449,6 +2553,67 @@ window.rateCard = async function(rating) {
         console.error("Erro ao salvar progresso:", e);
         currentCardIndex++;
         showCurrentCard();
+    }
+};
+
+// --- ETAPA 2: BOTÃO DESFAZER (volta a última avaliação) ---
+window.undoLastRating = async function() {
+    if (lastActionStack.length === 0) {
+        return; // Nada para desfazer
+    }
+
+    const last = lastActionStack.pop();
+
+    try {
+        // 1. Reverte os dados do card no banco para como estavam ANTES
+        const snap = last.cardSnapshot;
+        const restoreData = {
+            interval: snap.interval || 0,
+            ease: snap.ease || 2.5,
+            nextReview: snap.nextReview || Date.now(),
+            lastReview: snap.lastReview || 0,
+            lastRating: snap.lastRating || null
+        };
+
+        if (last.sharedSessionOwner) {
+            await update(
+                ref(db, `users/${currentUserUID}/anki/shared_progress/${last.sharedSessionOwner}/${last.firebaseKey}`),
+                restoreData
+            );
+        } else {
+            // Restaura também os contadores de acerto/erro
+            restoreData.hitCount = snap.hitCount || 0;
+            restoreData.missCount = snap.missCount || 0;
+
+            await update(ref(db, `users/${currentUserUID}/anki/cards/${last.firebaseKey}`), restoreData);
+
+            if (allCards[last.firebaseKey]) {
+                allCards[last.firebaseKey] = { ...allCards[last.firebaseKey], ...restoreData };
+            }
+        }
+
+        // 2. Reverte o placar da sessão
+        if (last.isMiss) {
+            sessionMiss = Math.max(0, sessionMiss - 1);
+        } else {
+            sessionHits = Math.max(0, sessionHits - 1);
+        }
+
+        // 3. Volta para o card anterior na fila
+        currentCardIndex = last.indexBefore;
+        if (currentCardIndex < 0) currentCardIndex = 0;
+
+        // Se a sessão tinha terminado, volta a exibir a tela de estudo
+        const viewEmpty = document.getElementById('viewEmpty');
+        const viewStudy = document.getElementById('viewStudy');
+        if (viewEmpty) viewEmpty.classList.add('hidden');
+        if (viewStudy) viewStudy.classList.remove('hidden');
+
+        showCurrentCard();
+
+    } catch (e) {
+        console.error("Erro ao desfazer:", e);
+        alert("Não foi possível desfazer a última ação.");
     }
 };
 
@@ -2521,6 +2686,27 @@ window.renderManagerList = function() {
         return matchDeck && searchContent.includes(filterText);
     });
     
+    // ETAPA 2: calcula o total de acertos/erros do que está filtrado
+    let totalHits = 0, totalMiss = 0;
+    filtered.forEach(card => {
+        totalHits += (card.hitCount || 0);
+        totalMiss += (card.missCount || 0);
+    });
+    const totalBox = document.getElementById('managerStatsBar');
+    if (totalBox) {
+        const totalResp = totalHits + totalMiss;
+        const pct = totalResp > 0 ? Math.round((totalHits / totalResp) * 100) : 0;
+        const escopo = (filterDeck === 'todos') ? 'Geral (todos os baralhos)' : `Baralho: ${filterDeck}`;
+        const elScope = document.getElementById('managerStatsScope');
+        const elHits = document.getElementById('managerStatsHits');
+        const elMiss = document.getElementById('managerStatsMiss');
+        const elPct = document.getElementById('managerStatsPct');
+        if (elScope) elScope.innerText = escopo;
+        if (elHits) elHits.innerText = totalHits;
+        if (elMiss) elMiss.innerText = totalMiss;
+        if (elPct) elPct.innerText = totalResp > 0 ? `${pct}% de acerto` : 'Sem respostas ainda';
+    }
+
     filtered.forEach((card, index) => {
         const tr = document.createElement('tr');
         
@@ -2542,6 +2728,19 @@ window.renderManagerList = function() {
 
         const isChecked = selectedManagerCards.has(card.id) ? 'checked' : '';
 
+        // ETAPA 2: célula com contadores de acerto e erro do card
+        const hits = card.hitCount || 0;
+        const miss = card.missCount || 0;
+        const statsCell = `
+            <div class="flex items-center justify-center gap-2">
+                <span class="inline-flex items-center gap-1 text-[11px] font-bold text-green-600 bg-green-50 border border-green-100 px-2 py-0.5 rounded" title="Acertos">
+                    <i class="fa-solid fa-check"></i> ${hits}
+                </span>
+                <span class="inline-flex items-center gap-1 text-[11px] font-bold text-red-500 bg-red-50 border border-red-100 px-2 py-0.5 rounded" title="Erros">
+                    <i class="fa-solid fa-xmark"></i> ${miss}
+                </span>
+            </div>`;
+
         // --- BOTÃO NOVO ADICIONADO ABAIXO (AMARELO) ---
         tr.innerHTML = `
             <td class="p-4 text-center">
@@ -2553,6 +2752,7 @@ window.renderManagerList = function() {
             <td class="p-4 font-bold text-gray-600 text-xs">${card.deck}</td>
             <td class="p-4 text-gray-700">${previewFront}</td>
             <td class="p-4">${legalText}</td>
+            <td class="p-4 text-center">${statsCell}</td>
             <td class="p-4 text-center">
                 <div class="flex items-center justify-center gap-2">
                     <button class="text-amber-500 hover:text-amber-600" onclick="window.resetCardProgress('${card.id}')" title="Resetar Progresso (Sanguessuga)"><i class="fa-solid fa-rotate-right"></i></button>
@@ -2935,6 +3135,42 @@ window.resetCardProgress = async function(id) {
     }
 };
 
+// --- ETAPA 2: RESETAR A CONTAGEM DE ACERTOS/ERROS DE UM BARALHO ---
+window.resetDeckCount = async function(deckName, event) {
+    if (event) event.stopPropagation(); // não abrir o baralho ao clicar no botão
+
+    if (!confirm(`Zerar a contagem de ACERTOS e ERROS do baralho "${deckName}"?\n\nO agendamento e o conteúdo dos cards NÃO serão afetados.\nEsta ação não pode ser desfeita.`)) return;
+
+    const updates = {};
+    let count = 0;
+
+    // Zera os contadores de todos os cards desse baralho
+    Object.keys(allCards).forEach(key => {
+        if (allCards[key].deck === deckName) {
+            updates[`users/${currentUserUID}/anki/cards/${key}/hitCount`] = 0;
+            updates[`users/${currentUserUID}/anki/cards/${key}/missCount`] = 0;
+            // Atualiza também a memória local
+            allCards[key].hitCount = 0;
+            allCards[key].missCount = 0;
+            count++;
+        }
+    });
+
+    if (count === 0) {
+        alert("Nenhum card encontrado neste baralho.");
+        return;
+    }
+
+    try {
+        await update(ref(db), updates);
+        alert(`Contagem zerada em ${count} card(s) do baralho "${deckName}".`);
+        renderDecksView(); // atualiza a tela
+    } catch (e) {
+        console.error(e);
+        alert("Erro ao zerar a contagem do baralho.");
+    }
+};
+
 //backup dos cards completo
 // --- FUNÇÃO DE BACKUP COMPLETO (NOVO) ---
 window.exportFullBackup = function() {
@@ -3042,7 +3278,9 @@ window.importDeckAction = function() {
                     ease: 2.5, 
                     nextReview: now, 
                     lastReview: 0,
-                    lastRating: null
+                    lastRating: null,
+                    hitCount: 0,  // ETAPA 2: contador de acertos
+                    missCount: 0  // ETAPA 2: contador de erros
                 };
                 
                 updates[`users/${currentUserUID}/anki/cards/${newKey}`] = newCard;
