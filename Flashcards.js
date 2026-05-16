@@ -83,12 +83,12 @@ window.batchDeleteCards = async function() {
 
     try {
         await update(ref(db), updates);
-        alert(`${count} cartões excluídos.`);
+        showToast(`${count} cartões excluídos.`, 'success');
         window.clearManagerSelection();
         window.renderManagerList();
     } catch (e) {
         console.error(e);
-        alert("Erro ao excluir cartões.");
+        showToast("Erro ao excluir cartões.", 'error');
     }
 };
 
@@ -136,7 +136,7 @@ window.confirmFolderSelection = async function() {
 
         try {
             await update(ref(db), updates);
-            alert("Cartões movidos com sucesso!");
+            showToast("Cartões movidos com sucesso!", 'success');
             isBatchMoveMode = false;
             window.closeFolderSelectionModal();
             window.clearManagerSelection();
@@ -146,7 +146,7 @@ window.confirmFolderSelection = async function() {
             document.querySelector('#folderSelectionModal h3').innerText = "Selecionar Localização";
         } catch (e) {
             console.error(e);
-            alert("Erro ao mover em lote.");
+            showToast("Erro ao mover em lote.", 'error');
         }
         return;
     }
@@ -256,6 +256,45 @@ function shuffleArray(arr) {
     return arr;
 }
 
+// --- ETAPA 3: NOTIFICAÇÃO DISCRETA (TOAST) ---
+// Substitui os alert() que travam a tela. Aparece no canto e some sozinho.
+// tipo: 'success' (verde), 'error' (vermelho), 'info' (azul).
+function showToast(message, tipo = 'success') {
+    const cores = {
+        success: { bg: '#16a34a', icon: 'fa-circle-check' },
+        error:   { bg: '#dc2626', icon: 'fa-circle-exclamation' },
+        info:    { bg: '#0284c7', icon: 'fa-circle-info' }
+    };
+    const cfg = cores[tipo] || cores.success;
+
+    const toast = document.createElement('div');
+    toast.style.cssText = `
+        position: fixed; bottom: 20px; right: 20px; z-index: 100000;
+        background: ${cfg.bg}; color: #fff; padding: 12px 18px;
+        border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+        font-size: 14px; font-weight: 600; display: flex; align-items: center;
+        gap: 10px; max-width: 360px; opacity: 0; transform: translateY(20px);
+        transition: opacity 0.25s ease, transform 0.25s ease;
+    `;
+    toast.innerHTML = `<i class="fa-solid ${cfg.icon}"></i> <span>${message}</span>`;
+    document.body.appendChild(toast);
+
+    // Aparece
+    requestAnimationFrame(() => {
+        toast.style.opacity = '1';
+        toast.style.transform = 'translateY(0)';
+    });
+
+    // Some sozinho depois de 3 segundos
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(20px)';
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+}
+// Deixa acessível em toda a página
+window.showToast = showToast;
+
 // --- COMPARTILHAMENTO ---
 
 // --- ATUALIZA A LEGENDA DO CARGO (UX MELHORADA) ---
@@ -278,7 +317,7 @@ window.shareDeckAction = async function() {
     const email = document.getElementById('shareInputEmail').value.trim();
     const role = document.getElementById('shareInputRole').value;
     
-    if (!email) return alert("Digite o e-mail do usuário.");
+    if (!email) return showToast("Digite o e-mail do usuário.", 'success');
     if (!currentDeckName) return;
 
     // Codifica email para usar como chave
@@ -306,12 +345,12 @@ window.shareDeckAction = async function() {
         const deckKey = btoa(unescape(encodeURIComponent(currentDeckName))).replace(/=/g,''); 
         await set(ref(db, `users/${currentUserUID}/anki/shared_out/${deckKey}/${recipientRef}`), myLogData);
 
-        alert(`Convite enviado para ${email}!`);
+        showToast(`Convite enviado para ${email}!`, 'success');
         document.getElementById('shareInputEmail').value = '';
         window.renderSharedUsers(); // Atualiza a lista visual
     } catch (e) {
         console.error(e);
-        alert("Erro ao compartilhar. Verifique a conexão.");
+        showToast("Erro ao compartilhar. Verifique a conexão.", 'error');
     }
 };
 
@@ -395,7 +434,7 @@ window.unshareDeckAction = async function(inviteId, recipientEmailEnc, deckKey) 
         window.renderSharedUsers();
     } catch (e) {
         console.error(e);
-        alert("Erro ao remover acesso.");
+        showToast("Erro ao remover acesso.", 'error');
     }
 };
 
@@ -592,7 +631,7 @@ window.startSharedSession = async function(ownerUid, deckPath, role) {
         const myProgress = progressSnap.exists() ? progressSnap.val() : {};
 
         if (!snap.exists()) {
-            alert("Baralho vazio ou não encontrado.");
+            showToast("Baralho vazio ou não encontrado.", 'error');
             return window.showDecksView();
         }
 
@@ -619,7 +658,7 @@ window.startSharedSession = async function(ownerUid, deckPath, role) {
             });
 
         if (cards.length === 0) {
-            alert("Este baralho está vazio.");
+            showToast("Este baralho está vazio.", 'error');
             return window.showDecksView();
         }
 
@@ -634,7 +673,7 @@ window.startSharedSession = async function(ownerUid, deckPath, role) {
         shuffleArray(studyQueue);
 
         if (studyQueue.length === 0) {
-            alert("Tudo em dia! Use o modo 'Revisar Tudo' se quiser praticar.");
+            showToast("Tudo em dia! Use o modo 'Revisar Tudo' se quiser praticar.", 'success');
             return window.showDecksView();
         }
 
@@ -657,7 +696,7 @@ window.startSharedSession = async function(ownerUid, deckPath, role) {
 
     } catch (e) {
         console.error("Erro ao carregar compartilhado:", e);
-        alert("Erro de conexão.");
+        showToast("Erro de conexão.", 'error');
         window.showDecksView();
     }
 };
@@ -691,7 +730,7 @@ window.skipCard = async function() {
                 updates[`users/${currentUserUID}/anki/cards/${card.firebaseKey}/nextReview`] = fiveMinutesLater;
                 await update(ref(db), updates);
                 studyQueue = [];
-                alert("Card adiado. Sessão finalizada.");
+                showToast("Card adiado. Sessão finalizada.", 'success');
                 window.showDecksView();
             } catch (e) { console.error(e); }
         }
@@ -798,6 +837,7 @@ window.handleDrop = async function(e, targetPath) {
 
 async function executeMove(oldPrefix, newPrefix) {
     const updates = {};
+    const renomeados = []; // {key, novoDeck}
     let count = 0;
 
     Object.keys(allCards).forEach(key => {
@@ -805,6 +845,7 @@ async function executeMove(oldPrefix, newPrefix) {
         if (deck === oldPrefix || deck.startsWith(oldPrefix + "::")) {
             const newDeckName = newPrefix + deck.substring(oldPrefix.length);
             updates[`users/${currentUserUID}/anki/cards/${key}/deck`] = newDeckName;
+            renomeados.push({ key, novoDeck: newDeckName });
             count++;
         }
     });
@@ -812,14 +853,17 @@ async function executeMove(oldPrefix, newPrefix) {
     if (count > 0) { 
         try { 
             await update(ref(db), updates); 
-            loadAnkiData(); 
+            // Velocidade: atualiza a memória local em vez de rebaixar tudo da nuvem
+            renomeados.forEach(r => { if (allCards[r.key]) allCards[r.key].deck = r.novoDeck; });
+            renderDecksView();
             if(!document.getElementById('deckConfigModal').classList.contains('hidden')) window.closeDeckConfigModal(); 
+            showToast("Movido com sucesso.", 'success');
         } catch(e) { 
             console.error(e); 
-            alert("Erro ao mover: " + e.message); 
+            showToast("Erro ao mover: " + e.message, 'error'); 
         } 
     } else { 
-        alert("Nenhum item encontrado."); 
+        showToast("Nenhum item encontrado.", 'error'); 
     }
 }
 
@@ -1164,10 +1208,17 @@ function renderDecksView() {
                                 <span class="text-base font-bold text-gray-400">${info.total}</span>
                                 <span class="text-[10px] font-bold text-gray-300 uppercase leading-none">Total</span>
                             </div>
+                            <div class="flex flex-col items-center" title="Quantas vezes você concluiu o baralho inteiro">
+                                <span class="text-base font-bold text-purple-500">${(deckSettings[info.fullPath] && deckSettings[info.fullPath].roundsCompleted) || 0}</span>
+                                <span class="text-[10px] font-bold text-gray-400 uppercase leading-none">Voltas</span>
+                            </div>
                         </div>
 
                         <div class="flex items-center gap-2">
-                            <button onclick="window.resetDeckCount('${info.fullPath}', event)" class="w-8 h-8 rounded-full bg-gray-50 text-gray-400 hover:bg-amber-100 hover:text-amber-600 hover:scale-110 transition flex items-center justify-center shadow-sm border border-gray-100" title="Resetar contagem de acertos/erros deste baralho">
+                            <button onclick="window.resetDeckFull('${info.fullPath}', event)" class="w-8 h-8 rounded-full bg-gray-50 text-gray-400 hover:bg-red-100 hover:text-red-600 hover:scale-110 transition flex items-center justify-center shadow-sm border border-gray-100" title="Reset Total: zera todo o progresso deste baralho">
+                                <i class="fa-solid fa-broom text-xs"></i>
+                            </button>
+                            <button onclick="window.resetDeckCount('${info.fullPath}', event)" class="w-8 h-8 rounded-full bg-gray-50 text-gray-400 hover:bg-amber-100 hover:text-amber-600 hover:scale-110 transition flex items-center justify-center shadow-sm border border-gray-100" title="Zerar apenas a contagem de acertos/erros deste baralho">
                                 <i class="fa-solid fa-arrow-rotate-left text-xs"></i>
                             </button>
                             ${sharedIconHTML} <div class="w-8 h-8 rounded-full ${isDue ? 'bg-sky-600 text-white shadow-md shadow-sky-200' : 'bg-gray-100 text-gray-300'} flex items-center justify-center transition-all transform group-hover:scale-110">
@@ -1251,7 +1302,7 @@ function startStudySession(deckName, isCramming) {
     
     shuffleArray(studyQueue);
 
-    if (!studyQueue || studyQueue.length === 0) return alert("Não há cartas para revisar agora.");
+    if (!studyQueue || studyQueue.length === 0) return showToast("Não há cartas para revisar agora.", 'success');
 
     // NOVO: Define o tamanho total para a barra de progresso
     initialSessionLength = studyQueue.length;
@@ -1316,14 +1367,25 @@ window.deleteFolder = async function(prefix, ev) {
     if (!confirm(`Tem certeza que deseja apagar a pasta "${prefix}" e TODOS os baralhos dentro dela?`)) return;
 
     const updates = {};
+    const removidos = [];
     Object.keys(allCards).forEach(key => {
         const deck = allCards[key].deck || "";
         if (deck === prefix || deck.startsWith(prefix + "::")) {
             updates[`users/${currentUserUID}/anki/cards/${key}`] = null;
+            removidos.push(key);
         }
     });
 
-    try { await update(ref(db), updates); loadAnkiData(); } catch(e) { console.error(e); }
+    try {
+        await update(ref(db), updates);
+        // Velocidade: atualiza a memória local em vez de rebaixar tudo da nuvem
+        removidos.forEach(key => delete allCards[key]);
+        renderDecksView();
+        showToast("Pasta apagada.", 'success');
+    } catch(e) {
+        console.error(e);
+        showToast("Erro ao apagar a pasta.", 'error');
+    }
 };
 
 window.renameDeck = async function(oldName, ev) {
@@ -1331,20 +1393,46 @@ window.renameDeck = async function(oldName, ev) {
     const newName = prompt("Novo nome:", oldName);
     if (!newName || newName === oldName) return;
     const updates = {};
+    const afetados = [];
     Object.keys(allCards).forEach(key => {
-        if (allCards[key].deck === oldName) updates[`users/${currentUserUID}/anki/cards/${key}/deck`] = newName;
+        if (allCards[key].deck === oldName) {
+            updates[`users/${currentUserUID}/anki/cards/${key}/deck`] = newName;
+            afetados.push(key);
+        }
     });
-    try { await update(ref(db), updates); loadAnkiData(); } catch(e) { console.error(e); }
+    try {
+        await update(ref(db), updates);
+        // Velocidade: atualiza a memória local
+        afetados.forEach(key => { if (allCards[key]) allCards[key].deck = newName; });
+        renderDecksView();
+        showToast("Baralho renomeado.", 'success');
+    } catch(e) {
+        console.error(e);
+        showToast("Erro ao renomear o baralho.", 'error');
+    }
 };
 
 window.deleteDeck = async function(deckName, ev) {
     ev.stopPropagation();
     if (!confirm("Apagar baralho?")) return;
     const updates = {};
+    const removidos = [];
     Object.keys(allCards).forEach(key => {
-        if (allCards[key].deck === deckName) updates[`users/${currentUserUID}/anki/cards/${key}`] = null;
+        if (allCards[key].deck === deckName) {
+            updates[`users/${currentUserUID}/anki/cards/${key}`] = null;
+            removidos.push(key);
+        }
     });
-    try { await update(ref(db), updates); loadAnkiData(); } catch(e) { console.error(e); }
+    try {
+        await update(ref(db), updates);
+        // Velocidade: atualiza a memória local
+        removidos.forEach(key => delete allCards[key]);
+        renderDecksView();
+        showToast("Baralho apagado.", 'success');
+    } catch(e) {
+        console.error(e);
+        showToast("Erro ao apagar o baralho.", 'error');
+    }
 };
 
 // --- ÁRVORE DE PASTAS RECURSIVA ---
@@ -1620,7 +1708,7 @@ window.saveCard = async function() {
     const id = document.getElementById('inputCardId').value;
     const deckNameSimple = document.getElementById('inputDeckNameNew').value.trim();
     
-    if (!deckNameSimple) return alert("Digite o nome do Baralho.");
+    if (!deckNameSimple) return showToast("Digite o nome do Baralho.", 'success');
     
     const fullDeckPath = selectedCreateFolder === "" ? deckNameSimple : selectedCreateFolder + "::" + deckNameSimple;
     
@@ -1652,12 +1740,12 @@ window.saveCard = async function() {
     let objectiveAnswer = null;
     if (format === 'objective') {
         const selectedRadio = document.querySelector('input[name="inputObjectiveAnswer"]:checked');
-        if (!selectedRadio) return alert("Para cartões de Julgamento, selecione CERTO ou ERRADO no gabarito.");
+        if (!selectedRadio) return showToast("Para cartões de Julgamento, selecione CERTO ou ERRADO no gabarito.", 'success');
         objectiveAnswer = selectedRadio.value;
     }
     // ----------------------------------------
 
-    if (!front) return alert("Preencha a Frente do card.");
+    if (!front) return showToast("Preencha a Frente do card.", 'success');
     
     const cardData = { 
         deck: fullDeckPath, 
@@ -1685,12 +1773,14 @@ window.saveCard = async function() {
             // ETAPA 2: preserva os contadores de acerto/erro ao editar o card
             cardData.hitCount = existingCard.hitCount || 0;
             cardData.missCount = existingCard.missCount || 0;
+            // ETAPA 3: preserva a marca de volta do baralho
+            cardData.roundDone = existingCard.roundDone || false;
             // --------------------------------------------------------
 
             await update(ref(db, `users/${currentUserUID}/anki/cards/${id}`), cardData); 
             
             if (isEditingFromManager) {
-                alert("Card atualizado!");
+                showToast("Card atualizado!", 'success');
                 window.closeCreateModal();
                 window.openManagerModal(); 
                 loadAnkiData().then(() => window.renderManagerList()); 
@@ -1705,11 +1795,11 @@ window.saveCard = async function() {
                     studyQueue[currentCardIndex] = { ...currentQueueCard, ...cardData };
                     showCurrentCard(); 
                 }
-                alert("Card atualizado!");
+                showToast("Card atualizado!", 'success');
                 window.closeCreateModal();
                 return; 
             } else {
-                alert("Atualizado!"); 
+                showToast("Atualizado!", 'success'); 
             }
         } else { 
             cardData.interval = 0; 
@@ -1720,9 +1810,10 @@ window.saveCard = async function() {
             cardData.lastRating = null;
             cardData.hitCount = 0;  // ETAPA 2: contador de acertos
             cardData.missCount = 0; // ETAPA 2: contador de erros
+            cardData.roundDone = false; // ETAPA 3: marca de volta do baralho
 
             await push(ref(db, `users/${currentUserUID}/anki/cards`), cardData); 
-            alert("Criado!"); 
+            showToast("Criado!", 'success'); 
         }
         
         if (!id) { 
@@ -1737,7 +1828,7 @@ window.saveCard = async function() {
         }
         
         loadAnkiData();
-    } catch (e) { console.error(e); alert("Erro ao salvar: " + e.message); }
+    } catch (e) { console.error(e); showToast("Erro ao salvar: " + e.message, 'error'); }
 };
 
 // --- FUNÇÃO PARA EDITAR NO MEIO DO ESTUDO ---
@@ -1779,7 +1870,7 @@ window.confirmRelocate = async function() {
     const itemName = currentDeckName.split("::").pop();
     let newPath = selectedTargetFolder === "" ? itemName : selectedTargetFolder + "::" + itemName;
 
-    if (newPath === currentDeckName) return alert("Destino igual origem.");
+    if (newPath === currentDeckName) return showToast("Destino igual origem.", 'success');
 
     if (confirm(`Mover "${itemName}" para dentro de "${selectedTargetFolder || 'Início'}"?`)) {
         await executeMove(currentDeckName, newPath);
@@ -1873,7 +1964,7 @@ window.applyPreset = function(type) {
         document.getElementById('unitEasyBonus').value = 'days';
         document.getElementById('unitGoodInterval').value = 'days';
         document.getElementById('unitHardInterval').value = 'days';
-        alert("Aplicado: Perfil Longo Prazo (Foco em retenção).");
+        showToast("Aplicado: Perfil Longo Prazo (Foco em retenção).", 'success');
     } else if (type === 'cramming') {
         // Reta Final (Agressivo)
         document.getElementById('cfgEasyBonus').value = 1.5; // Bônus pequeno
@@ -1884,7 +1975,7 @@ window.applyPreset = function(type) {
         document.getElementById('unitEasyBonus').value = 'days';
         document.getElementById('unitGoodInterval').value = 'days';
         document.getElementById('unitHardInterval').value = 'days';
-        alert("Aplicado: Perfil Reta Final (Você verá os cards com muita frequência).");
+        showToast("Aplicado: Perfil Reta Final (Você verá os cards com muita frequência).", 'success');
     }
 };
 
@@ -1919,11 +2010,11 @@ window.saveDeckConfig = async function() {
         const safeKey = encodeKey(currentDeckName);
         await update(ref(db, `users/${currentUserUID}/anki/settings/${safeKey}`), deckSettings[currentDeckName]); 
         
-        alert("Configurações salvas com sucesso!"); 
+        showToast("Configurações salvas com sucesso!", 'success'); 
         window.closeDeckConfigModal(); 
     } catch(e) { 
         console.error(e); 
-        alert("Erro ao salvar config: " + e.message);
+        showToast("Erro ao salvar config: " + e.message, 'error');
     }
 };
 
@@ -2419,6 +2510,46 @@ window.revealCard = function(forceReveal = false) {
 // Mantém o alias
 window.flipCard = window.revealCard;
 
+// --- ETAPA 3: DETECTA QUANDO O BARALHO COMPLETOU UMA VOLTA INTEIRA ---
+// Uma "volta" = todos os cards do baralho receberam uma resposta nova.
+// Quando isso acontece: o contador de voltas sobe +1 e as marcas (roundDone) se limpam.
+async function checkRoundCompletion(deckName) {
+    if (!deckName) return;
+
+    // Pega todos os cards desse baralho
+    const deckKeys = Object.keys(allCards).filter(k => allCards[k].deck === deckName);
+    if (deckKeys.length === 0) return;
+
+    // Só conta a volta se TODOS os cards estiverem marcados como respondidos
+    const allDone = deckKeys.every(k => allCards[k].roundDone === true);
+    if (!allDone) return;
+
+    try {
+        const updates = {};
+
+        // 1. Limpa a marca de todos os cards (prepara a próxima volta)
+        deckKeys.forEach(k => {
+            updates[`users/${currentUserUID}/anki/cards/${k}/roundDone`] = false;
+            if (allCards[k]) allCards[k].roundDone = false;
+        });
+
+        // 2. Soma +1 no contador de voltas (guardado nas configurações do baralho)
+        const atual = (deckSettings[deckName] && deckSettings[deckName].roundsCompleted) || 0;
+        const novo = atual + 1;
+        const safeKey = encodeKey(deckName);
+        updates[`users/${currentUserUID}/anki/settings/${safeKey}/roundsCompleted`] = novo;
+
+        // Atualiza a memória local
+        if (!deckSettings[deckName]) deckSettings[deckName] = {};
+        deckSettings[deckName].roundsCompleted = novo;
+
+        await update(ref(db), updates);
+        showToast(`🎉 Baralho concluído! Voltas completas: ${novo}.`, 'success');
+    } catch (e) {
+        console.error("Erro ao contar volta do baralho:", e);
+    }
+}
+
 window.rateCard = async function(rating) {
     const card = studyQueue[currentCardIndex];
     if(!card) {
@@ -2521,6 +2652,8 @@ window.rateCard = async function(rating) {
             // Contadores só são gravados nos baralhos próprios do usuário
             progressData.hitCount = isMiss ? prevHitCount : (prevHitCount + 1);
             progressData.missCount = isMiss ? (prevMissCount + 1) : prevMissCount;
+            // ETAPA 3: marca este card como "respondido nesta volta"
+            progressData.roundDone = true;
 
             const updatedCard = { ...card, ...progressData };
             updates[`users/${currentUserUID}/anki/cards/${card.firebaseKey}`] = updatedCard;
@@ -2532,6 +2665,11 @@ window.rateCard = async function(rating) {
         }
 
         await update(ref(db), updates);
+
+        // ETAPA 3: verifica se o baralho completou uma "volta" inteira
+        if (!sharedSessionOwner) {
+            await checkRoundCompletion(card.deck);
+        }
 
         // ETAPA 2 - PLACAR DA SESSÃO
         if (isMiss) sessionMiss++; else sessionHits++;
@@ -2613,7 +2751,7 @@ window.undoLastRating = async function() {
 
     } catch (e) {
         console.error("Erro ao desfazer:", e);
-        alert("Não foi possível desfazer a última ação.");
+        showToast("Não foi possível desfazer a última ação.", 'error');
     }
 };
 
@@ -2782,13 +2920,13 @@ function populateExportImportSelects() {
 
 window.exportDeckAction = function() {
     const deckName = document.getElementById('exportDeckSelect').value;
-    if(!deckName) return alert("Selecione um baralho para exportar.");
+    if(!deckName) return showToast("Selecione um baralho para exportar.", 'success');
     const cardsToExport = Object.values(allCards).filter(c => c.deck === deckName).map(c => {
         const { interval, ease, nextReview, lastReview, lastRating, ...cleanCard } = c;
         cleanCard.exportedDate = new Date().toISOString();
         return cleanCard;
     });
-    if(cardsToExport.length === 0) return alert("Baralho vazio.");
+    if(cardsToExport.length === 0) return showToast("Baralho vazio.", 'error');
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(cardsToExport, null, 2));
     const downloadAnchorNode = document.createElement('a');
     downloadAnchorNode.setAttribute("href", dataStr);
@@ -2820,16 +2958,16 @@ window.toggleImportMode = function() {
 
 window.importDeckAction = function() {
     const input = document.getElementById('importFileInput');
-    if(input.files.length === 0) return alert("Selecione um arquivo JSON primeiro.");
+    if(input.files.length === 0) return showToast("Selecione um arquivo JSON primeiro.", 'success');
     
     const mode = document.querySelector('input[name="importMode"]:checked').value;
     let targetDeckName = "";
     if(mode === 'new') {
         targetDeckName = document.getElementById('importNewDeckName').value.trim();
-        if(!targetDeckName) return alert("Digite o nome do novo baralho.");
+        if(!targetDeckName) return showToast("Digite o nome do novo baralho.", 'success');
     } else {
         targetDeckName = document.getElementById('importTargetDeck').value;
-        if(!targetDeckName) return alert("Selecione o baralho existente.");
+        if(!targetDeckName) return showToast("Selecione o baralho existente.", 'success');
     }
     
     const file = input.files[0];
@@ -2859,12 +2997,12 @@ window.importDeckAction = function() {
             
             if(count > 0) {
                 await update(ref(db), updates);
-                alert(`${count} cartões importados!`);
+                showToast(`${count} cartões importados!`, 'success');
                 loadAnkiData(); 
                 window.closeManagerModal();
                 input.value = '';
-            } else { alert("Nenhum cartão válido."); }
-        } catch(err) { console.error(err); alert("Erro ao importar: " + err.message); }
+            } else { showToast("Nenhum cartão válido.", 'error'); }
+        } catch(err) { console.error(err); showToast("Erro ao importar: " + err.message, 'error'); }
     };
     reader.readAsText(file);
 };
@@ -2922,7 +3060,7 @@ window.wrapCloze = function() {
     if(!s.rangeCount)return; 
     const r=s.getRangeAt(0); 
     const t=r.toString(); 
-    if(!t)return alert("Selecione texto."); 
+    if(!t)return showToast("Selecione texto.", 'success'); 
     document.execCommand('insertText', false, `{{c1::${t}}}`); 
 };
 
@@ -3131,15 +3269,15 @@ window.resetCardProgress = async function(id) {
         
     } catch (e) {
         console.error(e);
-        alert("Erro ao resetar card.");
+        showToast("Erro ao resetar card.", 'error');
     }
 };
 
-// --- ETAPA 2: RESETAR A CONTAGEM DE ACERTOS/ERROS DE UM BARALHO ---
+// --- ETAPA 2/3: RESETAR APENAS A CONTAGEM DE ACERTOS/ERROS DE UM BARALHO ---
 window.resetDeckCount = async function(deckName, event) {
     if (event) event.stopPropagation(); // não abrir o baralho ao clicar no botão
 
-    if (!confirm(`Zerar a contagem de ACERTOS e ERROS do baralho "${deckName}"?\n\nO agendamento e o conteúdo dos cards NÃO serão afetados.\nEsta ação não pode ser desfeita.`)) return;
+    if (!confirm(`Zerar apenas a contagem de ACERTOS e ERROS do baralho "${deckName}"?\n\nO agendamento e o conteúdo dos cards NÃO serão afetados.\nEsta ação não pode ser desfeita.`)) return;
 
     const updates = {};
     let count = 0;
@@ -3157,24 +3295,81 @@ window.resetDeckCount = async function(deckName, event) {
     });
 
     if (count === 0) {
-        alert("Nenhum card encontrado neste baralho.");
+        showToast("Nenhum card encontrado neste baralho.", 'error');
         return;
     }
 
     try {
         await update(ref(db), updates);
-        alert(`Contagem zerada em ${count} card(s) do baralho "${deckName}".`);
-        renderDecksView(); // atualiza a tela
+        showToast(`Acertos/erros zerados em ${count} card(s).`, 'success');
+        renderDecksView(); // atualiza a tela (dados já estão na memória)
     } catch (e) {
         console.error(e);
-        alert("Erro ao zerar a contagem do baralho.");
+        showToast("Erro ao zerar a contagem do baralho.", 'error');
+    }
+};
+
+// --- ETAPA 3: RESET TOTAL DO BARALHO ---
+// Deixa todos os cards do baralho como se NUNCA tivessem sido respondidos:
+// zera agendamento, histórico, acertos/erros, marcas de volta e contador de voltas.
+window.resetDeckFull = async function(deckName, event) {
+    if (event) event.stopPropagation(); // não abrir o baralho ao clicar no botão
+
+    if (!confirm(
+        `RESET TOTAL do baralho "${deckName}".\n\n` +
+        `ATENÇÃO: isto apaga TODO o seu progresso neste baralho:\n` +
+        `• o agendamento de revisão (todos os cards voltam a ser NOVOS)\n` +
+        `• o histórico de respostas (Errei/Bom/datas)\n` +
+        `• a contagem de acertos e erros\n` +
+        `• o contador de voltas concluídas\n\n` +
+        `O conteúdo dos cards (frente/verso) é mantido.\n` +
+        `Esta ação NÃO pode ser desfeita. Deseja continuar?`
+    )) return;
+
+    const now = Date.now();
+    const updates = {};
+    let count = 0;
+
+    // Para cada card do baralho, restaura os campos como um card "virgem"
+    Object.keys(allCards).forEach(key => {
+        if (allCards[key].deck === deckName) {
+            const base = `users/${currentUserUID}/anki/cards/${key}`;
+            updates[`${base}/interval`] = 0;
+            updates[`${base}/ease`] = 2.5;
+            updates[`${base}/nextReview`] = now;   // disponível para estudar agora
+            updates[`${base}/lastReview`] = 0;
+            updates[`${base}/lastRating`] = null;
+            updates[`${base}/hitCount`] = 0;
+            updates[`${base}/missCount`] = 0;
+            updates[`${base}/roundDone`] = false;  // marca de "volta" (ver contador de voltas)
+            count++;
+        }
+    });
+
+    if (count === 0) {
+        showToast("Nenhum card encontrado neste baralho.", 'error');
+        return;
+    }
+
+    // Zera também o contador de voltas concluídas (guardado nas configurações do baralho)
+    const safeKey = encodeKey(deckName);
+    updates[`users/${currentUserUID}/anki/settings/${safeKey}/roundsCompleted`] = 0;
+
+    try {
+        await update(ref(db), updates);
+        // Recarrega tudo da nuvem para a tela refletir na hora (Domínio 0%, Novos, barra vazia)
+        await loadAnkiData();
+        showToast(`Reset total concluído: ${count} card(s) voltaram a ser novos.`, 'success');
+    } catch (e) {
+        console.error(e);
+        showToast("Erro ao executar o reset total.", 'error');
     }
 };
 
 //backup dos cards completo
 // --- FUNÇÃO DE BACKUP COMPLETO (NOVO) ---
 window.exportFullBackup = function() {
-    if(Object.keys(allCards).length === 0) return alert("Não há dados para exportar.");
+    if(Object.keys(allCards).length === 0) return showToast("Não há dados para exportar.", 'success');
 
     const backupData = {
         type: 'FULL_BACKUP',
@@ -3198,7 +3393,7 @@ window.exportFullBackup = function() {
 // Substitua a função window.importDeckAction existente por esta:
 window.importDeckAction = function() {
     const input = document.getElementById('importFileInput');
-    if(input.files.length === 0) return alert("Selecione um arquivo JSON primeiro.");
+    if(input.files.length === 0) return showToast("Selecione um arquivo JSON primeiro.", 'success');
     
     const file = input.files[0];
     const reader = new FileReader();
@@ -3227,7 +3422,7 @@ window.importDeckAction = function() {
                 }
 
                 await update(ref(db), updates);
-                alert("Backup restaurado com sucesso!");
+                showToast("Backup restaurado com sucesso!", 'success');
                 loadAnkiData();
                 window.closeManagerModal();
                 return;
@@ -3247,10 +3442,10 @@ window.importDeckAction = function() {
             let targetDeckName = "";
             if(mode === 'new') {
                 targetDeckName = document.getElementById('importNewDeckName').value.trim();
-                if(!targetDeckName) return alert("Digite o nome do novo baralho.");
+                if(!targetDeckName) return showToast("Digite o nome do novo baralho.", 'success');
             } else {
                 targetDeckName = document.getElementById('importTargetDeck').value;
-                if(!targetDeckName) return alert("Selecione o baralho existente.");
+                if(!targetDeckName) return showToast("Selecione o baralho existente.", 'success');
             }
 
             let count = 0;
@@ -3280,7 +3475,8 @@ window.importDeckAction = function() {
                     lastReview: 0,
                     lastRating: null,
                     hitCount: 0,  // ETAPA 2: contador de acertos
-                    missCount: 0  // ETAPA 2: contador de erros
+                    missCount: 0,  // ETAPA 2: contador de erros
+                    roundDone: false  // ETAPA 3: marca de volta do baralho
                 };
                 
                 updates[`users/${currentUserUID}/anki/cards/${newKey}`] = newCard;
@@ -3289,13 +3485,13 @@ window.importDeckAction = function() {
             
             if(count > 0) {
                 await update(ref(db), updates);
-                alert(`${count} cartões importados para "${targetDeckName}"!`);
+                showToast(`${count} cartões importados para "${targetDeckName}"!`, 'success');
                 loadAnkiData(); 
                 window.closeManagerModal();
                 input.value = '';
-            } else { alert("Nenhum cartão válido encontrado no arquivo."); }
+            } else { showToast("Nenhum cartão válido encontrado no arquivo.", 'error'); }
 
-        } catch(err) { console.error(err); alert("Erro ao importar: " + err.message); }
+        } catch(err) { console.error(err); showToast("Erro ao importar: " + err.message, 'error'); }
     };
     reader.readAsText(file);
 };
