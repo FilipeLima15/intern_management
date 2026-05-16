@@ -2281,6 +2281,33 @@ function formatTime(days) {
     return Math.round(days) + " dias";
 }
 
+// --- ETAPA 4: FORMATA A DATA/HORA PROVÁVEL DA REVISÃO ---
+// Recebe o intervalo em dias e devolve algo como "hoje 14:35" ou "19/05 11:00".
+function formatReviewDate(days) {
+    const alvo = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+
+    const hh = String(alvo.getHours()).padStart(2, '0');
+    const mm = String(alvo.getMinutes()).padStart(2, '0');
+    const horario = `${hh}:${mm}`;
+
+    // Verifica se a revisão cai hoje ou amanhã
+    const hoje = new Date();
+    const ehMesmoDia = (a, b) =>
+        a.getDate() === b.getDate() &&
+        a.getMonth() === b.getMonth() &&
+        a.getFullYear() === b.getFullYear();
+
+    const amanha = new Date();
+    amanha.setDate(hoje.getDate() + 1);
+
+    if (ehMesmoDia(alvo, hoje)) return `hoje ${horario}`;
+    if (ehMesmoDia(alvo, amanha)) return `amanhã ${horario}`;
+
+    const dd = String(alvo.getDate()).padStart(2, '0');
+    const mes = String(alvo.getMonth() + 1).padStart(2, '0');
+    return `${dd}/${mes} ${horario}`;
+}
+
 // --- ETAPA 2: FINALIZA A SESSÃO MOSTRANDO O PLACAR DE ACERTOS/ERROS ---
 function finishStudySession() {
     const viewStudy = document.getElementById('viewStudy');
@@ -2355,6 +2382,9 @@ function showCurrentCard() {
     const controls = document.getElementById('studyControls');
     controls.classList.remove('opacity-100', 'pointer-events-auto');
     controls.classList.add('opacity-0', 'pointer-events-none');
+
+    // ETAPA 4: ao trocar de card, volta a exibir todos os 4 botões de avaliação
+    resetRatingButtonsVisibility();
     
     // UI Resets
     const objActions = document.getElementById('objectiveStudyActions');
@@ -2430,11 +2460,21 @@ function showCurrentCard() {
     // Errei é sempre fixo (Reset), independente do modo
     const valAgain = sAgain; 
 
-    // Atualiza os textos dos botões usando a nova formatTime
+    // Atualiza os textos dos botões: tempo + data/hora provável da revisão
     document.getElementById('timeAgain').innerText = formatTime(valAgain);
     document.getElementById('timeHard').innerText = formatTime(valHard);
     document.getElementById('timeGood').innerText = formatTime(valGood);
     document.getElementById('timeEasy').innerText = formatTime(valEasy);
+
+    // ETAPA 4: data/hora provável da revisão em cada botão
+    const setDate = (id, dias) => {
+        const el = document.getElementById(id);
+        if (el) el.innerText = formatReviewDate(dias);
+    };
+    setDate('dateAgain', valAgain);
+    setDate('dateHard', valHard);
+    setDate('dateGood', valGood);
+    setDate('dateEasy', valEasy);
 
     // Renderização do HTML do Card
     setTimeout(() => {
@@ -2555,6 +2595,15 @@ window.rateCard = async function(rating) {
     if(!card) {
         showCurrentCard();
         return;
+    }
+
+    // ETAPA 4: ignora avaliação por um botão que está escondido
+    // (ex.: card de Certo/Errado em que aquela opção não é permitida).
+    const mapaBotao = { again: 0, hard: 1, good: 2, easy: 3 };
+    const controls = document.getElementById('studyControls');
+    if (controls) {
+        const btn = controls.querySelectorAll('button')[mapaBotao[rating]];
+        if (btn && btn.style.display === 'none') return; // botão indisponível: ignora
     }
 
     const now = Date.now();
@@ -3236,10 +3285,38 @@ window.checkObjectiveAnswer = function(userChoice, event) {
     }
 
     setTimeout(() => {
+        // ETAPA 4: mostra só os botões adequados ao resultado
+        // Acertou -> Difícil, Bom, Fácil | Errou -> Errei, Difícil
+        applyObjectiveButtonsVisibility(isCorrect);
         // AQUI ESTÁ A MUDANÇA: passamos 'true' para forçar a revelação
         window.revealCard(true);
     }, 600);
 };
+
+// --- ETAPA 4: AJUSTA QUAIS BOTÕES DE AVALIAÇÃO APARECEM (cards Certo/Errado) ---
+function applyObjectiveButtonsVisibility(isCorrect) {
+    const controls = document.getElementById('studyControls');
+    if (!controls) return;
+    const botoes = controls.querySelectorAll('button');
+    // Ordem fixa no HTML: 0=Errei, 1=Difícil, 2=Bom, 3=Fácil
+    // Acertou: esconde Errei (índice 0). Errou: esconde Bom e Fácil (índices 2 e 3).
+    botoes.forEach((b, i) => {
+        let mostrar = true;
+        if (isCorrect) {
+            if (i === 0) mostrar = false;        // sem "Errei"
+        } else {
+            if (i === 2 || i === 3) mostrar = false; // sem "Bom" e "Fácil"
+        }
+        b.style.display = mostrar ? '' : 'none';
+    });
+}
+
+// --- ETAPA 4: RESTAURA TODOS OS 4 BOTÕES (usado ao trocar de card) ---
+function resetRatingButtonsVisibility() {
+    const controls = document.getElementById('studyControls');
+    if (!controls) return;
+    controls.querySelectorAll('button').forEach(b => { b.style.display = ''; });
+}
 
 
 //resetar o progresso do cartão
@@ -3535,3 +3612,129 @@ document.addEventListener('keydown', (e) => {
         if (e.key === '4') window.rateCard('easy');
     }
 });
+
+// --- ETAPA 4: MODAL DE ESTATÍSTICAS DA PASTA ---
+
+// Abre o modal mostrando os cards da pasta em que o usuário está navegando.
+window.openFolderStats = function() {
+    const modal = document.getElementById('folderStatsModal');
+    if (!modal) return;
+
+    // Caminho da pasta atual (vazio = Início/Raiz)
+    const pastaAtual = currentPathStack.join("::");
+    const titulo = document.getElementById('folderStatsTitle');
+    if (titulo) titulo.innerText = pastaAtual === "" ? "Início (todas as pastas)" : pastaAtual;
+
+    modal.classList.remove('hidden');
+    window.renderFolderStats();
+};
+
+window.closeFolderStats = function() {
+    const modal = document.getElementById('folderStatsModal');
+    if (modal) modal.classList.add('hidden');
+};
+
+// Monta a lista de estatísticas, respeitando a ordenação escolhida.
+window.renderFolderStats = function() {
+    const tbody = document.getElementById('folderStatsBody');
+    const empty = document.getElementById('folderStatsEmpty');
+    const resumo = document.getElementById('folderStatsResumo');
+    if (!tbody) return;
+
+    const pastaAtual = currentPathStack.join("::");
+
+    // Junta os cards da pasta atual (e subpastas), respeitando a categoria ativa
+    let cards = Object.keys(allCards)
+        .map(key => ({ ...allCards[key], id: key }))
+        .filter(c => {
+            const deck = c.deck || "";
+            const dentroDaPasta = (pastaAtual === "")
+                ? true
+                : (deck === pastaAtual || deck.startsWith(pastaAtual + "::"));
+            const mesmaCategoria = (c.category || 'conteudo') === currentCategoryFilter;
+            return dentroDaPasta && mesmaCategoria;
+        });
+
+    // Cálculo de aproveitamento de cada card
+    cards.forEach(c => {
+        c._hits = c.hitCount || 0;
+        c._miss = c.missCount || 0;
+        c._total = c._hits + c._miss;
+        c._pct = c._total > 0 ? Math.round((c._hits / c._total) * 100) : -1; // -1 = sem respostas
+    });
+
+    // Ordenação
+    const ordem = (document.getElementById('folderStatsSort') || {}).value || 'missDesc';
+    cards.sort((a, b) => {
+        switch (ordem) {
+            case 'hitDesc':   return b._hits - a._hits;
+            case 'totalDesc': return b._total - a._total;
+            case 'pctAsc':
+                // cards sem resposta vão para o fim
+                if (a._pct === -1) return 1;
+                if (b._pct === -1) return -1;
+                return a._pct - b._pct;
+            case 'pctDesc':
+                if (a._pct === -1) return 1;
+                if (b._pct === -1) return -1;
+                return b._pct - a._pct;
+            case 'missDesc':
+            default:          return b._miss - a._miss;
+        }
+    });
+
+    // Resumo geral da pasta
+    let somaHits = 0, somaMiss = 0;
+    cards.forEach(c => { somaHits += c._hits; somaMiss += c._miss; });
+    const somaTotal = somaHits + somaMiss;
+    const pctGeral = somaTotal > 0 ? Math.round((somaHits / somaTotal) * 100) : 0;
+    if (resumo) {
+        resumo.innerText = `${cards.length} card(s) • ${somaHits} acertos • ${somaMiss} erros` +
+            (somaTotal > 0 ? ` • ${pctGeral}% de aproveitamento` : '');
+    }
+
+    // Renderiza a tabela
+    tbody.innerHTML = '';
+    if (cards.length === 0) {
+        if (empty) empty.classList.remove('hidden');
+        return;
+    }
+    if (empty) empty.classList.add('hidden');
+
+    cards.forEach((c, index) => {
+        const tr = document.createElement('tr');
+        tr.className = "border-b border-gray-100 hover:bg-gray-50 transition";
+
+        // Texto do card sem HTML
+        const texto = (c.front || '(sem texto)').replace(/<[^>]*>?/gm, '').substring(0, 70);
+        const nomeBaralho = (c.deck || '').split('::').pop();
+
+        // Cor do aproveitamento
+        let pctTexto, pctClasse;
+        if (c._pct === -1) {
+            pctTexto = '—';
+            pctClasse = 'text-gray-300';
+        } else {
+            pctTexto = c._pct + '%';
+            pctClasse = c._pct >= 70 ? 'text-green-600' : (c._pct >= 40 ? 'text-amber-600' : 'text-red-500');
+        }
+
+        tr.innerHTML = `
+            <td class="p-3 font-mono text-gray-400 text-xs">${index + 1}</td>
+            <td class="p-3 font-bold text-gray-500 text-xs">${nomeBaralho}</td>
+            <td class="p-3 text-gray-700">${texto}</td>
+            <td class="p-3 text-center">
+                <span class="inline-flex items-center gap-1 text-xs font-bold text-green-600">
+                    <i class="fa-solid fa-check"></i> ${c._hits}
+                </span>
+            </td>
+            <td class="p-3 text-center">
+                <span class="inline-flex items-center gap-1 text-xs font-bold text-red-500">
+                    <i class="fa-solid fa-xmark"></i> ${c._miss}
+                </span>
+            </td>
+            <td class="p-3 text-center font-extrabold ${pctClasse}">${pctTexto}</td>
+        `;
+        tbody.appendChild(tr);
+    });
+};
