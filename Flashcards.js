@@ -1326,6 +1326,9 @@ function startStudySession(deckName, isCramming) {
         studyQueue = isCramming ? cards : cards.filter(c => c.nextReview <= now || c.interval === 0);
     }
     
+    // NOVO: remove cards suspensos de qualquer fila (baralho, pasta ou sanguessugas)
+    studyQueue = studyQueue.filter(c => !c.suspended);
+
     shuffleArray(studyQueue);
 
     if (!studyQueue || studyQueue.length === 0) return showToast("Não há cartas para revisar agora.", 'success');
@@ -2947,6 +2950,15 @@ window.renderManagerList = function() {
             </div>`;
 
         // --- BOTÃO NOVO ADICIONADO ABAIXO (AMARELO) ---
+
+        // NOVO: botão Suspender/Reativar — muda conforme o estado do card
+        const suspendBtn = card.suspended
+            ? `<button class="text-green-500 hover:text-green-700" onclick="window.toggleSuspendCard('${card.id}')" title="Reativar card (voltar a estudar)"><i class="fa-solid fa-play"></i></button>`
+            : `<button class="text-slate-400 hover:text-slate-600" onclick="window.toggleSuspendCard('${card.id}')" title="Suspender card (pausar sem excluir)"><i class="fa-solid fa-pause"></i></button>`;
+
+        // NOVO: card suspenso fica com aparência apagada na lista
+        if (card.suspended) tr.classList.add('opacity-50');
+
         tr.innerHTML = `
             <td class="p-4 text-center">
                 <input type="checkbox" class="manager-card-checkbox rounded border-gray-300 text-sky-600 focus:ring-sky-500 cursor-pointer" 
@@ -2961,6 +2973,7 @@ window.renderManagerList = function() {
             <td class="p-4 text-center">
                 <div class="flex items-center justify-center gap-2">
                     <button class="text-amber-500 hover:text-amber-600" onclick="window.resetCardProgress('${card.id}')" title="Resetar Progresso (Sanguessuga)"><i class="fa-solid fa-rotate-right"></i></button>
+                    ${suspendBtn}
                     <button class="text-sky-600 hover:text-sky-800" onclick="window.editCard('${card.id}')" title="Editar"><i class="fa-solid fa-pen"></i></button>
                     <button class="text-red-400 hover:text-red-600" onclick="window.deleteCard('${card.id}')" title="Excluir"><i class="fa-solid fa-trash"></i></button>
                 </div>
@@ -3020,6 +3033,28 @@ window.toggleImportMode = function() {
     } else {
         document.getElementById('importNewDeckName').classList.add('opacity-50');
         document.getElementById('importTargetDeck').classList.remove('opacity-50');
+    }
+};
+
+// --- SUSPENDER / REATIVAR CARD ---
+// Card suspenso fica guardado no sistema, mas não aparece nas sessões de estudo.
+window.toggleSuspendCard = async function(id) {
+    const card = allCards[id];
+    if (!card) return;
+
+    const novoEstado = !card.suspended; // inverte: se estava suspenso, reativa; se não, suspende
+
+    try {
+        // Salva no Firebase
+        await update(ref(db, `users/${currentUserUID}/anki/cards/${id}`), { suspended: novoEstado });
+        // Atualiza localmente para ver o efeito na hora
+        card.suspended = novoEstado;
+
+        showToast(novoEstado ? "Card suspenso (pausado)." : "Card reativado!", 'success');
+        window.renderManagerList(); // redesenha a lista para o botão trocar
+    } catch (e) {
+        console.error(e);
+        showToast("Erro ao atualizar o card.", 'error');
     }
 };
 
