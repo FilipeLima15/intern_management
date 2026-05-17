@@ -485,6 +485,7 @@ onAuthStateChanged(auth, (user) => {
 
 async function loadAnkiData() {
     try {
+        await loadPreferences(); // NOVO: carrega as preferências do painel de configurações
         const cardsSnap = await get(ref(db, `users/${currentUserUID}/anki/cards`));
         allCards = cardsSnap.exists() ? cardsSnap.val() : {};
         
@@ -2960,6 +2961,59 @@ window.undoLastRating = async function() {
 };
 
 // --- FUNÇÕES DE GERENCIAMENTO (MODAL) QUE ESTAVAM FALTANDO ---
+// ===========================================================
+//  PAINEL DE CONFIGURAÇÕES — preferências salvas no Firebase
+//  (cantinho próprio: anki/preferences — não mexe no anki/settings)
+// ===========================================================
+
+// Guarda as preferências carregadas. Valores padrão = tudo desligado.
+let appPreferences = { streak: false, cardTime: false, tooltips: false };
+
+// Lê as preferências do Firebase ao abrir o app.
+async function loadPreferences() {
+    if (!currentUserUID) return;
+    try {
+        const snap = await get(ref(db, `users/${currentUserUID}/anki/preferences`));
+        if (snap.exists()) {
+            appPreferences = { ...appPreferences, ...snap.val() };
+        }
+    } catch (e) {
+        console.error("Erro ao carregar preferências:", e);
+    }
+}
+
+// Abre o painel e marca os interruptores conforme o que está salvo.
+window.openSettingsModal = function() {
+    document.getElementById('prefStreak').checked   = !!appPreferences.streak;
+    document.getElementById('prefCardTime').checked = !!appPreferences.cardTime;
+    document.getElementById('prefTooltips').checked = !!appPreferences.tooltips;
+    document.getElementById('settingsModal').classList.remove('hidden');
+};
+
+window.closeSettingsModal = function() {
+    document.getElementById('settingsModal').classList.add('hidden');
+};
+
+// Salva no Firebase sempre que um interruptor é mexido.
+window.savePreferences = async function() {
+    appPreferences = {
+        streak:   document.getElementById('prefStreak').checked,
+        cardTime: document.getElementById('prefCardTime').checked,
+        tooltips: document.getElementById('prefTooltips').checked
+    };
+    try {
+        await set(ref(db, `users/${currentUserUID}/anki/preferences`), appPreferences);
+        // Mostra o aviso "Salvo!" por 1,5 segundo
+        const status = document.getElementById('prefSaveStatus');
+        if (status) {
+            status.style.opacity = '1';
+            setTimeout(() => { status.style.opacity = '0'; }, 1500);
+        }
+    } catch (e) {
+        console.error("Erro ao salvar preferências:", e);
+        showToast("Erro ao salvar configuração.", 'error');
+    }
+};
 window.openManagerModal = function() {
     document.getElementById('managerModal').classList.remove('hidden');
     // Abre por padrão na aba de lista

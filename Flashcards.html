@@ -141,6 +141,19 @@
         /* Estilo para Sanguessugas (Leeches) */
         .leech-row { background-color: #fff1f2 !important; }
         .leech-row td:first-child { border-left: 4px solid #f43f5e; }
+        /* --- INTERRUPTORES DO PAINEL DE CONFIGURAÇÕES --- */
+        .pref-row { display: flex; align-items: center; justify-content: space-between; padding: 14px 4px; border-bottom: 1px solid #f1f5f9; }
+        .pref-row:last-child { border-bottom: none; }
+        .pref-info { display: flex; align-items: center; gap: 14px; }
+        .pref-icon { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; }
+        .pref-texts h4 { margin: 0; font-size: 14px; font-weight: 700; color: #334155; }
+        .pref-texts p { margin: 2px 0 0; font-size: 12px; color: #94a3b8; line-height: 1.3; }
+        .toggle-switch { position: relative; width: 46px; height: 26px; flex-shrink: 0; }
+        .toggle-switch input { opacity: 0; width: 0; height: 0; }
+        .toggle-slider { position: absolute; cursor: pointer; inset: 0; background: #cbd5e1; border-radius: 9999px; transition: 0.25s; }
+        .toggle-slider::before { content: ""; position: absolute; height: 20px; width: 20px; left: 3px; bottom: 3px; background: #fff; border-radius: 50%; transition: 0.25s; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+        .toggle-switch input:checked + .toggle-slider { background: #0284c7; }
+        .toggle-switch input:checked + .toggle-slider::before { transform: translateX(20px); }
     </style>
 </head>
 <body class="bg-gray-100 text-gray-800 h-screen flex overflow-hidden font-sans">
@@ -176,6 +189,9 @@
 
                     <button onclick="window.openManagerModal()" class="w-9 h-9 rounded-full bg-white border border-gray-200 text-gray-500 hover:text-sky-600 flex items-center justify-center transition shadow-sm" title="Gerenciar Cartões">
                         <i class="fa-solid fa-list-check"></i>
+                    </button>
+                    <button onclick="window.openSettingsModal()" class="w-9 h-9 rounded-full bg-white border border-gray-200 text-gray-500 hover:text-sky-600 flex items-center justify-center transition shadow-sm" title="Configurações">
+                        <i class="fa-solid fa-gear"></i>
                     </button>
                     <button onclick="window.openCreateModal()" class="bg-sky-600 hover:bg-sky-700 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-md transition flex items-center gap-2">
                         <i class="fa-solid fa-plus"></i> Novo Card
@@ -890,6 +906,68 @@
         </div>
     </div>
 
+    <!-- PAINEL DE CONFIGURAÇÕES -->
+    <div id="settingsModal" class="fixed inset-0 bg-black/60 hidden z-[80] flex items-center justify-center backdrop-blur-sm">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md flex flex-col overflow-hidden border border-white/50">
+            <div class="bg-gray-50 px-6 py-4 border-b border-gray-200 flex justify-between items-center shrink-0">
+                <h3 class="text-lg font-bold text-gray-800 flex items-center gap-2">
+                    <i class="fa-solid fa-gear text-sky-600"></i> Configurações
+                </h3>
+                <button onclick="window.closeSettingsModal()" class="text-gray-400 hover:text-red-500"><i class="fa-solid fa-xmark text-xl"></i></button>
+            </div>
+
+            <div class="p-6">
+                <p class="text-xs text-gray-400 mb-3">Ative ou desative recursos do seu estudo. As escolhas são salvas na sua conta.</p>
+
+                <div class="pref-row">
+                    <div class="pref-info">
+                        <div class="pref-icon bg-orange-100 text-orange-500"><i class="fa-solid fa-fire"></i></div>
+                        <div class="pref-texts">
+                            <h4>Ofensiva (Streak)</h4>
+                            <p>Mostra quantos dias seguidos você estudou.</p>
+                        </div>
+                    </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="prefStreak" onchange="window.savePreferences()">
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+
+                <div class="pref-row">
+                    <div class="pref-info">
+                        <div class="pref-icon bg-sky-100 text-sky-500"><i class="fa-solid fa-stopwatch"></i></div>
+                        <div class="pref-texts">
+                            <h4>Tempo por card</h4>
+                            <p>Mede quanto tempo você leva em cada card.</p>
+                        </div>
+                    </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="prefCardTime" onchange="window.savePreferences()">
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+
+                <div class="pref-row">
+                    <div class="pref-info">
+                        <div class="pref-icon bg-violet-100 text-violet-500"><i class="fa-solid fa-comment-dots"></i></div>
+                        <div class="pref-texts">
+                            <h4>Tooltips</h4>
+                            <p>Caixinhas de dica ao passar o mouse sobre termos.</p>
+                        </div>
+                    </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="prefTooltips" onchange="window.savePreferences()">
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="px-6 py-3 bg-gray-50 border-t border-gray-100 text-center">
+                <span id="prefSaveStatus" class="text-xs font-bold text-green-600 opacity-0 transition-opacity"><i class="fa-solid fa-check mr-1"></i> Salvo!</span>
+            </div>
+        </div>
+    </div>
+    
     <script type="module" src="Flashcards.js"></script>
     <script src="menu.js"></script>
 </body>
