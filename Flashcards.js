@@ -486,6 +486,7 @@ onAuthStateChanged(auth, (user) => {
 async function loadAnkiData() {
     try {
         await loadPreferences(); // NOVO: carrega as preferências do painel de configurações
+        setTimeout(() => window.applyTooltips(), 300); // NOVO: aplica as tooltips após a tela montar
         const cardsSnap = await get(ref(db, `users/${currentUserUID}/anki/cards`));
         allCards = cardsSnap.exists() ? cardsSnap.val() : {};
         
@@ -2995,6 +2996,34 @@ window.closeSettingsModal = function() {
 };
 
 // Salva no Firebase sempre que um interruptor é mexido.
+// --- TOOLTIPS BONITAS (Tippy.js) — ligadas/desligadas pelo painel ---
+let tippyInstances = []; // guarda as tooltips criadas, para poder remover depois
+
+window.applyTooltips = function() {
+    // Primeiro remove as tooltips antigas (se houver), para não duplicar
+    tippyInstances.forEach(inst => { try { inst.destroy(); } catch(e){} });
+    tippyInstances = [];
+
+    // Se o interruptor estiver desligado, para por aqui (volta ao padrão do navegador)
+    if (!appPreferences.tooltips) return;
+
+    // Se a biblioteca não carregou (sem internet, etc.), não faz nada
+    if (typeof tippy === 'undefined') return;
+
+    // Aplica o Tippy em todo botão/elemento que tenha um "title"
+    document.querySelectorAll('[title]').forEach(el => {
+        const texto = el.getAttribute('title');
+        if (!texto) return;
+        el.setAttribute('data-tippy-content', texto);
+        el.removeAttribute('title'); // tira o title para não aparecer a caixinha feia junto
+    });
+
+    tippyInstances = tippy('[data-tippy-content]', {
+        theme: 'light-border',
+        animation: 'shift-away',
+        delay: [200, 0]
+    });
+};
 window.savePreferences = async function() {
     appPreferences = {
         streak:   document.getElementById('prefStreak').checked,
@@ -3003,6 +3032,7 @@ window.savePreferences = async function() {
     };
     try {
         await set(ref(db, `users/${currentUserUID}/anki/preferences`), appPreferences);
+        window.applyTooltips(); // NOVO: liga/desliga as tooltips na hora
         // Mostra o aviso "Salvo!" por 1,5 segundo
         const status = document.getElementById('prefSaveStatus');
         if (status) {
