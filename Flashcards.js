@@ -1320,10 +1320,10 @@ window.openFocusedReview = function() {
                 Revise os cards que você <b>errou</b> num período. Escolha um atalho ou defina as datas.
             </p>
             <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-bottom:14px;">
-                <button type="button" onclick="window._focusPreset(2)"    class="swal2-styled" style="background:#7c3aed;font-size:12px;padding:6px 12px;margin:0;">48 horas</button>
-                <button type="button" onclick="window._focusPreset(7)"    class="swal2-styled" style="background:#7c3aed;font-size:12px;padding:6px 12px;margin:0;">7 dias</button>
-                <button type="button" onclick="window._focusPreset(30)"   class="swal2-styled" style="background:#7c3aed;font-size:12px;padding:6px 12px;margin:0;">30 dias</button>
-                <button type="button" onclick="window._focusPreset(null)" class="swal2-styled" style="background:#64748b;font-size:12px;padding:6px 12px;margin:0;">Tudo</button>
+                <button type="button" onclick="window._focusPreset(2)"    class="swal2-styled" style="background:#0284c7;color:#fff;font-size:12px;padding:6px 12px;margin:0;">48 horas</button>
+                <button type="button" onclick="window._focusPreset(7)"    class="swal2-styled" style="background:#0284c7;color:#fff;font-size:12px;padding:6px 12px;margin:0;">7 dias</button>
+                <button type="button" onclick="window._focusPreset(30)"   class="swal2-styled" style="background:#0284c7;color:#fff;font-size:12px;padding:6px 12px;margin:0;">30 dias</button>
+                <button type="button" onclick="window._focusPreset(null)" class="swal2-styled" style="background:#64748b;color:#fff;font-size:12px;padding:6px 12px;margin:0;">Tudo</button>
             </div>
             <div style="display:flex;gap:10px;justify-content:center;align-items:flex-end;">
                 <div style="text-align:left;">
@@ -1339,7 +1339,7 @@ window.openFocusedReview = function() {
         showCancelButton: true,
         confirmButtonText: 'Iniciar Revisão',
         cancelButtonText: 'Cancelar',
-        confirmButtonColor: '#7c3aed',
+        confirmButtonColor: '#0284c7',
         cancelButtonColor: '#94a3b8',
         reverseButtons: true,
         preConfirm: () => {
