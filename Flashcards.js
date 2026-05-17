@@ -3,6 +3,44 @@ import { db, auth } from "./firebase-config.js";
 import { ref, set, get, update, push, remove } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
+// ===========================================================
+//  SWEETALERT2 — caixas de aviso bonitas (substituem confirm/prompt)
+// ===========================================================
+
+// Confirmacao SIM / NAO. Devolve true se confirmou, false se cancelou.
+// Uso: if (!await confirmSwal("Excluir?")) return;
+function confirmSwal(message, title = 'Confirmação') {
+    return Swal.fire({
+        title: title,
+        html: String(message).replace(/\n/g, '<br>'),
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonText: 'Sim',
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#0284c7',
+        cancelButtonColor: '#94a3b8',
+        reverseButtons: true
+    }).then(result => result.isConfirmed);
+}
+
+// Caixa para o usuario DIGITAR um texto. Devolve o texto, ou null se cancelar.
+// Uso: const nome = await promptSwal("Nome:", "valor padrão");
+function promptSwal(message, defaultValue = '') {
+    return Swal.fire({
+        title: message,
+        input: 'text',
+        inputValue: defaultValue || '',
+        showCancelButton: true,
+        confirmButtonText: 'OK',
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#0284c7',
+        cancelButtonColor: '#94a3b8',
+        reverseButtons: true,
+        inputAttributes: { autocapitalize: 'off' }
+    }).then(result => (result.isConfirmed ? result.value : null));
+}
+
+
 let currentUserUID = null;
 let allCards = {};
 let deckSettings = {}; 
@@ -73,7 +111,7 @@ window.batchDeleteCards = async function() {
     const count = selectedManagerCards.size;
     if (count === 0) return;
 
-    if (!confirm(`Tem certeza que deseja EXCLUIR ${count} cartões selecionados?\nEssa ação não pode ser desfeita.`)) return;
+    if (!await confirmSwal(`Tem certeza que deseja EXCLUIR ${count} cartões selecionados?\nEssa ação não pode ser desfeita.`)) return;
 
     const updates = {};
     selectedManagerCards.forEach(id => {
@@ -110,7 +148,7 @@ window.confirmFolderSelection = async function() {
     
     // Se for modo Batch Move (Gerenciador)
     if (isBatchMoveMode) {
-        if (!confirm(`Mover ${selectedManagerCards.size} cartões para "${pathName}"?`)) return;
+        if (!await confirmSwal(`Mover ${selectedManagerCards.size} cartões para "${pathName}"?`)) return;
         
         const updates = {};
         // Se a pasta for "Início", o deck é apenas o nome do card original? Não, precisa manter a estrutura ou achatar?
@@ -422,7 +460,7 @@ window.renderSharedUsers = async function() {
 
 // 3. Remover Acesso
 window.unshareDeckAction = async function(inviteId, recipientEmailEnc, deckKey) {
-    if(!confirm("Remover o acesso deste usuário?")) return;
+    if(!await confirmSwal("Remover o acesso deste usuário?")) return;
     
     try {
         // Remove do 'inbox' do destinatário
@@ -723,7 +761,7 @@ window.skipCard = async function() {
     if (!card) return;
 
     if (studyQueue.length === 1) {
-        if(confirm("Este é o último card. Deseja adiá-lo por 5 minutos?")) {
+        if(await confirmSwal("Este é o último card. Deseja adiá-lo por 5 minutos?")) {
             try {
                 const updates = {};
                 const fiveMinutesLater = Date.now() + (5 * 60 * 1000);
@@ -777,8 +815,8 @@ window.resetPath = function() {
     renderDecksView();
 };
 
-window.createFolderFlow = function() {
-    const folderName = prompt("Nome da Nova Pasta:");
+window.createFolderFlow = async function() {
+    const folderName = await promptSwal("Nome da Nova Pasta:");
     if(!folderName || !folderName.trim()) return;
     window.enterFolder(folderName.trim());
     const hint = document.createElement('div');
@@ -830,7 +868,7 @@ window.handleDrop = async function(e, targetPath) {
     
     let newPath = targetPath === "" ? itemName : targetPath + "::" + itemName;
 
-    if (confirm(`Mover "${itemName}" para dentro de "${targetName}"?`)) { 
+    if (await confirmSwal(`Mover "${itemName}" para dentro de "${targetName}"?`)) { 
         await executeMove(draggedItemPath, newPath); 
     }
 };
@@ -1274,7 +1312,7 @@ window.studyLeeches = function() {
 };
 
 // --- NOVA FUNÇÃO: ESTUDAR PASTA RECURSIVAMENTE ---
-window.studyFolder = function(folderPath, event) {
+window.studyFolder = async function(folderPath, event) {
     if(event) event.stopPropagation();
 
     const now = Date.now();
@@ -1292,7 +1330,7 @@ window.studyFolder = function(folderPath, event) {
     let dueCards = cards.filter(c => c.nextReview <= now || c.interval === 0);
     
     if (dueCards.length === 0) {
-        if(confirm(`Nada vencido nesta pasta (Total: ${cards.length} cartas).\n\nDeseja revisar TUDO nesta pasta (Modo Cramming)?`)) {
+        if(await confirmSwal(`Nada vencido nesta pasta (Total: ${cards.length} cartas).\n\nDeseja revisar TUDO nesta pasta (Modo Cramming)?`)) {
             pendingDeckName = folderPath + " (Revisão Geral)"; // Nome fictício para exibição
             pendingIsCramming = true;
             // Hack: Precisamos injetar as cartas manualmente pois startStudySession busca por nome exato do deck
@@ -1380,7 +1418,7 @@ window.toggleDeckSection = function(sectionId) {
 
 window.renameFolder = async function(oldPrefix, ev) {
     ev.stopPropagation();
-    const newName = prompt("Novo nome para a pasta:", oldPrefix.split("::").pop());
+    const newName = await promptSwal("Novo nome para a pasta:", oldPrefix.split("::").pop());
     if (!newName) return;
     
     const parts = oldPrefix.split("::"); 
@@ -1393,7 +1431,7 @@ window.renameFolder = async function(oldPrefix, ev) {
 
 window.deleteFolder = async function(prefix, ev) {
     ev.stopPropagation();
-    if (!confirm(`Tem certeza que deseja apagar a pasta "${prefix}" e TODOS os baralhos dentro dela?`)) return;
+    if (!await confirmSwal(`Tem certeza que deseja apagar a pasta "${prefix}" e TODOS os baralhos dentro dela?`)) return;
 
     const updates = {};
     const removidos = [];
@@ -1419,7 +1457,7 @@ window.deleteFolder = async function(prefix, ev) {
 
 window.renameDeck = async function(oldName, ev) {
     ev.stopPropagation();
-    const newName = prompt("Novo nome:", oldName);
+    const newName = await promptSwal("Novo nome:", oldName);
     if (!newName || newName === oldName) return;
     const updates = {};
     const afetados = [];
@@ -1443,7 +1481,7 @@ window.renameDeck = async function(oldName, ev) {
 
 window.deleteDeck = async function(deckName, ev) {
     ev.stopPropagation();
-    if (!confirm("Apagar baralho?")) return;
+    if (!await confirmSwal("Apagar baralho?")) return;
     const updates = {};
     const removidos = [];
     Object.keys(allCards).forEach(key => {
@@ -1744,7 +1782,7 @@ window.saveCard = async function() {
             }
         }
         if (deckExists) {
-            if(!confirm(`O baralho "${deckNameSimple}" já existe nesta pasta.\n\nDeseja adicionar este card a ele?`)) {
+            if(!await confirmSwal(`O baralho "${deckNameSimple}" já existe nesta pasta.\n\nDeseja adicionar este card a ele?`)) {
                 return;
             }
         }
@@ -1893,7 +1931,7 @@ window.confirmRelocate = async function() {
 
     if (newPath === currentDeckName) return showToast("Destino igual origem.", 'success');
 
-    if (confirm(`Mover "${itemName}" para dentro de "${selectedTargetFolder || 'Início'}"?`)) {
+    if (await confirmSwal(`Mover "${itemName}" para dentro de "${selectedTargetFolder || 'Início'}"?`)) {
         await executeMove(currentDeckName, newPath);
     }
 };
@@ -2197,7 +2235,7 @@ function initStudyTimer(mode, startSeconds) {
     studyTimerInterval = setInterval(runTimer, 1000);
 }
 
-function runTimer() {
+async function runTimer() {
     if (studyTimerPaused) return;
     
     if (studyTimerMode === 'stopwatch') {
@@ -2209,7 +2247,7 @@ function runTimer() {
             // Tempo acabou
             clearInterval(studyTimerInterval);
             studyTimerInterval = null;
-            if(confirm("O tempo acabou! Deseja continuar estudando sem timer?")) {
+            if(await confirmSwal("O tempo acabou! Deseja continuar estudando sem timer?")) {
                 document.getElementById('studyTimerContainer').classList.add('hidden');
             } else {
                 window.showDecksView();
@@ -2243,13 +2281,13 @@ window.toggleTimer = function() {
     }
 };
 
-window.stopTimer = function(silent = false) {
+window.stopTimer = async function(silent = false) {
     if (studyTimerInterval) {
         clearInterval(studyTimerInterval);
         studyTimerInterval = null;
     }
     if (!silent) {
-        if(confirm("Parar cronômetro e ocultar?")) {
+        if(await confirmSwal("Parar cronômetro e ocultar?")) {
             document.getElementById('studyTimerContainer').classList.add('hidden');
         } else {
             // Se cancelar, retoma (reinicia intervalo se não estava pausado)
@@ -2260,11 +2298,11 @@ window.stopTimer = function(silent = false) {
 
 // --- ESTUDO ---
 
-window.checkAndStartSession = function(deckName, totalDue) {
+window.checkAndStartSession = async function(deckName, totalDue) {
     // Passo 1: Verifica se pode estudar
     if (totalDue > 0) {
         openTimerConfig(deckName, false);
-    } else if (confirm(`Este baralho está em dia! \n\nGostaria de revisar tudo novamente (Modo Cramming)?`)) {
+    } else if (await confirmSwal(`Este baralho está em dia! \n\nGostaria de revisar tudo novamente (Modo Cramming)?`)) {
         openTimerConfig(deckName, true);
     }
 };
@@ -3059,7 +3097,7 @@ window.toggleSuspendCard = async function(id) {
 };
 
 window.deleteCard = async function(id) { 
-    if(!confirm("Excluir?")) return; 
+    if(!await confirmSwal("Excluir?")) return; 
     try { 
         await remove(ref(db, `users/${currentUserUID}/anki/cards/${id}`)); 
         loadAnkiData().then(()=>window.renderManagerList()); 
@@ -3151,13 +3189,13 @@ window.applyColor = (c) => {
 window.insertTable = () => document.execCommand('insertHTML', false, '<table style="width:100%; border:1px solid black"><tr><td>.</td><td>.</td></tr></table>');
 
 // --- 6. LOGOUT (Correção para o botão do Menu) ---
-document.addEventListener('click', (e) => {
+document.addEventListener('click', async (e) => {
     // Detecta clique no botão de sair (mesmo que criado dinamicamente pelo menu.js)
     const btn = e.target.closest('#btnLogout');
     
     if (btn) {
         e.preventDefault();
-        if(confirm("Deseja realmente sair?")) {
+        if(await confirmSwal("Deseja realmente sair?")) {
             signOut(auth).then(() => {
                 console.log("Deslogado com sucesso.");
                 window.location.href = 'index.html';
@@ -3170,7 +3208,7 @@ document.addEventListener('click', (e) => {
 
 // --- TIMER COMPARTILHADO ---
 
-window.prepareSharedSession = function(ownerUid, deckPath, role, totalDue) {
+window.prepareSharedSession = async function(ownerUid, deckPath, role, totalDue) {
     // Guarda os dados para usar depois que o usuário escolher o tempo
     pendingSharedData = { ownerUid, deckPath, role };
     
@@ -3178,7 +3216,7 @@ window.prepareSharedSession = function(ownerUid, deckPath, role, totalDue) {
     // Se totalDue > 0, modo normal. Se 0, pergunta Cramming.
     if (totalDue > 0) {
         openTimerConfig(deckPath + " (Compartilhado)", false);
-    } else if (confirm(`Este baralho compartilhado está em dia! \n\nGostaria de revisar tudo novamente (Modo Cramming)?`)) {
+    } else if (await confirmSwal(`Este baralho compartilhado está em dia! \n\nGostaria de revisar tudo novamente (Modo Cramming)?`)) {
         openTimerConfig(deckPath + " (Compartilhado)", true);
     }
 };
@@ -3323,7 +3361,7 @@ function resetRatingButtonsVisibility() {
 
 //resetar o progresso do cartão
 window.resetCardProgress = async function(id) {
-    if(!confirm("Deseja resetar o progresso deste card?\n\nEle voltará a ser um card NOVO e sairá do estado de Sanguessuga.")) return;
+    if(!await confirmSwal("Deseja resetar o progresso deste card?\n\nEle voltará a ser um card NOVO e sairá do estado de Sanguessuga.")) return;
 
     // Dados de um card "virgem"
     const resetData = {
@@ -3356,7 +3394,7 @@ window.resetCardProgress = async function(id) {
 window.resetDeckCount = async function(deckName, event) {
     if (event) event.stopPropagation(); // não abrir o baralho ao clicar no botão
 
-    if (!confirm(`Zerar apenas a contagem de ACERTOS e ERROS do baralho "${deckName}"?\n\nO agendamento e o conteúdo dos cards NÃO serão afetados.\nEsta ação não pode ser desfeita.`)) return;
+    if (!await confirmSwal(`Zerar apenas a contagem de ACERTOS e ERROS do baralho "${deckName}"?\n\nO agendamento e o conteúdo dos cards NÃO serão afetados.\nEsta ação não pode ser desfeita.`)) return;
 
     const updates = {};
     let count = 0;
@@ -3394,7 +3432,7 @@ window.resetDeckCount = async function(deckName, event) {
 window.resetDeckFull = async function(deckName, event) {
     if (event) event.stopPropagation(); // não abrir o baralho ao clicar no botão
 
-    if (!confirm(
+    if (!await confirmSwal(
         `RESET TOTAL do baralho "${deckName}".\n\n` +
         `ATENÇÃO: isto apaga TODO o seu progresso neste baralho:\n` +
         `• o agendamento de revisão (todos os cards voltam a ser NOVOS)\n` +
@@ -3483,7 +3521,7 @@ window.importDeckAction = function() {
             
             // CASO 1: É UM BACKUP COMPLETO (Restaura tudo)
             if (data.type === 'FULL_BACKUP' && data.cards) {
-                if(!confirm("Este arquivo parece ser um BACKUP COMPLETO.\n\nIsso irá adicionar todos os cards e restaurar configurações.\nDeseja continuar?")) return;
+                if(!await confirmSwal("Este arquivo parece ser um BACKUP COMPLETO.\n\nIsso irá adicionar todos os cards e restaurar configurações.\nDeseja continuar?")) return;
                 
                 // Mescla ou sobrescreve? O Firebase update mescla chaves.
                 // Para restaurar exatamente, ideal seria setar, mas perigoso apagar dados novos.
