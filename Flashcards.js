@@ -1287,6 +1287,102 @@ function renderDecksView() {
 
 // --- ESTUDAR SÓ SANGUESSUGAS (cards com fator de facilidade muito baixo) ---
 // Reaproveita o mesmo motor de estudo da função studyFolder.
+
+// ===========================================================
+//  REVISÃO FOCADA — estuda os cards cuja última nota foi "Errei"
+//  dentro de um período escolhido pelo usuário.
+// ===========================================================
+
+// Atalho: preenche os campos de data ao clicar num botão de período.
+window._focusPreset = function(days) {
+    const de = document.getElementById('focusDateStart');
+    const ate = document.getElementById('focusDateEnd');
+    if (!de || !ate) return;
+
+    ate.value = new Date().toISOString().slice(0, 10); // hoje
+    if (days === null) {
+        de.value = ''; // "Tudo": sem data inicial
+    } else {
+        const inicio = new Date();
+        inicio.setDate(inicio.getDate() - days);
+        de.value = inicio.toISOString().slice(0, 10);
+    }
+};
+
+// Abre o popup de seleção de período (atalhos + datas personalizadas).
+window.openFocusedReview = function() {
+    const hojeStr = new Date().toISOString().slice(0, 10);
+
+    Swal.fire({
+        title: 'Revisão Focada',
+        html: `
+            <p style="font-size:13px;color:#64748b;margin:0 0 14px;">
+                Revise os cards que você <b>errou</b> num período. Escolha um atalho ou defina as datas.
+            </p>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-bottom:14px;">
+                <button type="button" onclick="window._focusPreset(2)"    class="swal2-styled" style="background:#7c3aed;font-size:12px;padding:6px 12px;margin:0;">48 horas</button>
+                <button type="button" onclick="window._focusPreset(7)"    class="swal2-styled" style="background:#7c3aed;font-size:12px;padding:6px 12px;margin:0;">7 dias</button>
+                <button type="button" onclick="window._focusPreset(30)"   class="swal2-styled" style="background:#7c3aed;font-size:12px;padding:6px 12px;margin:0;">30 dias</button>
+                <button type="button" onclick="window._focusPreset(null)" class="swal2-styled" style="background:#64748b;font-size:12px;padding:6px 12px;margin:0;">Tudo</button>
+            </div>
+            <div style="display:flex;gap:10px;justify-content:center;align-items:flex-end;">
+                <div style="text-align:left;">
+                    <label style="font-size:11px;font-weight:700;color:#94a3b8;">De (início)</label><br>
+                    <input type="date" id="focusDateStart" class="swal2-input" style="margin:4px 0 0;width:150px;">
+                </div>
+                <div style="text-align:left;">
+                    <label style="font-size:11px;font-weight:700;color:#94a3b8;">Até (fim)</label><br>
+                    <input type="date" id="focusDateEnd" class="swal2-input" style="margin:4px 0 0;width:150px;" value="${hojeStr}">
+                </div>
+            </div>
+        `,
+        showCancelButton: true,
+        confirmButtonText: 'Iniciar Revisão',
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#7c3aed',
+        cancelButtonColor: '#94a3b8',
+        reverseButtons: true,
+        preConfirm: () => {
+            const deVal = document.getElementById('focusDateStart').value;
+            const ateVal = document.getElementById('focusDateEnd').value;
+            // Converte as datas: início do dia "de" até o fim do dia "até".
+            const inicio = deVal ? new Date(deVal + 'T00:00:00').getTime() : 0;
+            const fim = ateVal ? new Date(ateVal + 'T23:59:59').getTime() : Date.now();
+            if (inicio > fim) {
+                Swal.showValidationMessage('A data inicial não pode ser depois da final.');
+                return false;
+            }
+            return { inicio, fim };
+        }
+    }).then(result => {
+        if (result.isConfirmed) {
+            startFocusedReview(result.value.inicio, result.value.fim);
+        }
+    });
+};
+
+// Monta a sessão de estudo só com os cards "em erro" no período escolhido.
+function startFocusedReview(inicio, fim) {
+    const cards = Object.keys(allCards)
+        .map(key => ({ ...allCards[key], firebaseKey: key }))
+        .filter(c => {
+            const errou = c.lastRating === 'again';                                  // última nota foi "Errei"
+            const noPeriodo = c.lastReview && c.lastReview >= inicio && c.lastReview <= fim;
+            const mesmaAba = (c.category || 'conteudo') === currentCategoryFilter;     // respeita Conteúdo/Jurisprudência
+            return errou && noPeriodo && mesmaAba;
+        });
+
+    if (cards.length === 0) {
+        showToast("Nenhum card errado nesse período. 🎉", 'success');
+        return;
+    }
+
+    pendingDeckName = "🎯 Revisão Focada (" + cards.length + " cards)";
+    pendingIsCramming = true;
+    window.customStudyQueue = cards;
+    openTimerConfig(pendingDeckName, true);
+}
+
 window.studyLeeches = function() {
     // Junta todas as sanguessugas da aba atual (Conteúdo ou Jurisprudência).
     // O critério (ease < 1.35) é o MESMO já usado no Gerenciador.
