@@ -1247,6 +1247,32 @@ function renderDecksView() {
     }
 }
 
+// --- ESTUDAR SÓ SANGUESSUGAS (cards com fator de facilidade muito baixo) ---
+// Reaproveita o mesmo motor de estudo da função studyFolder.
+window.studyLeeches = function() {
+    // Junta todas as sanguessugas da aba atual (Conteúdo ou Jurisprudência).
+    // O critério (ease < 1.35) é o MESMO já usado no Gerenciador.
+    const leeches = Object.keys(allCards)
+        .map(key => ({ ...allCards[key], firebaseKey: key }))
+        .filter(c => {
+            const isLeech = c.ease && c.ease < 1.35;
+            const matchesCat = (c.category || 'conteudo') === currentCategoryFilter;
+            return isLeech && matchesCat;
+        });
+
+    // Se não houver nenhuma, avisa de forma amigável e para por aqui.
+    if (leeches.length === 0) {
+        showToast("Nenhuma sanguessuga encontrada nesta aba. Bom trabalho! 🎉", 'success');
+        return;
+    }
+
+    // Monta a fila customizada e abre a tela de timer (modo "revisar tudo").
+    pendingDeckName = "🐛 Sanguessugas (" + leeches.length + " cards)";
+    pendingIsCramming = true;
+    window.customStudyQueue = leeches;
+    openTimerConfig(pendingDeckName, true);
+};
+
 // --- NOVA FUNÇÃO: ESTUDAR PASTA RECURSIVAMENTE ---
 window.studyFolder = function(folderPath, event) {
     if(event) event.stopPropagation();
@@ -1587,14 +1613,6 @@ window.selectCreateFolder = function(path, element) {
     document.getElementById('btnConfirmFolder').disabled = false;
 };
 
-window.confirmFolderSelection = function() {
-    const display = document.getElementById('displaySelectedFolder');
-    const pathName = selectedCreateFolder === "" ? "Início" : selectedCreateFolder;
-    display.innerHTML = `<i class="fa-solid fa-folder text-amber-400 mr-2"></i> <span>${pathName}</span>`;
-    
-    window.updateDeckSuggestions();
-    window.closeFolderSelectionModal();
-};
 
 window.updateDeckSuggestions = function() {
     const datalist = document.getElementById('deckSuggestionsNew');
@@ -3003,57 +3021,6 @@ window.toggleImportMode = function() {
         document.getElementById('importNewDeckName').classList.add('opacity-50');
         document.getElementById('importTargetDeck').classList.remove('opacity-50');
     }
-};
-
-window.importDeckAction = function() {
-    const input = document.getElementById('importFileInput');
-    if(input.files.length === 0) return showToast("Selecione um arquivo JSON primeiro.", 'success');
-    
-    const mode = document.querySelector('input[name="importMode"]:checked').value;
-    let targetDeckName = "";
-    if(mode === 'new') {
-        targetDeckName = document.getElementById('importNewDeckName').value.trim();
-        if(!targetDeckName) return showToast("Digite o nome do novo baralho.", 'success');
-    } else {
-        targetDeckName = document.getElementById('importTargetDeck').value;
-        if(!targetDeckName) return showToast("Selecione o baralho existente.", 'success');
-    }
-    
-    const file = input.files[0];
-    const reader = new FileReader();
-    
-    reader.onload = async function(e) {
-        try {
-            const importedCards = JSON.parse(e.target.result);
-            if(!Array.isArray(importedCards)) throw new Error("Formato inválido.");
-            
-            let count = 0;
-            const updates = {};
-            const now = Date.now();
-            
-            importedCards.forEach(card => {
-                if(!card.front || !card.back) return;
-                const newKey = push(ref(db, `users/${currentUserUID}/anki/cards`)).key;
-                const newCard = { 
-                    ...card, deck: targetDeckName, imported: true, 
-                    created: now, interval: 0, ease: 2.5, 
-                    nextReview: now, lastReview: 0 
-                };
-                delete newCard.firebaseKey; 
-                updates[`users/${currentUserUID}/anki/cards/${newKey}`] = newCard;
-                count++;
-            });
-            
-            if(count > 0) {
-                await update(ref(db), updates);
-                showToast(`${count} cartões importados!`, 'success');
-                loadAnkiData(); 
-                window.closeManagerModal();
-                input.value = '';
-            } else { showToast("Nenhum cartão válido.", 'error'); }
-        } catch(err) { console.error(err); showToast("Erro ao importar: " + err.message, 'error'); }
-    };
-    reader.readAsText(file);
 };
 
 window.deleteCard = async function(id) { 
