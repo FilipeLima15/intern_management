@@ -186,6 +186,15 @@
             /* 9C — Folga geral: menos espaço desperdiçado nas bordas */
             .flex-1.overflow-y-auto.p-6 { padding: 12px !important; }
         }
+
+        /* --- CONTROLES DE TAMANHO DA LETRA DO CARD --- */
+        .font-control { position: absolute; bottom: 10px; right: 10px; display: flex; gap: 4px; z-index: 30; }
+        .font-control button {
+            width: 26px; height: 26px; border-radius: 6px; border: 1px solid #e2e8f0;
+            background: #f8fafc; color: #64748b; font-weight: 800; font-size: 13px;
+            cursor: pointer; transition: 0.15s; display: flex; align-items: center; justify-content: center;
+        }
+        .font-control button:hover { background: #e0f2fe; color: #0284c7; border-color: #bae6fd; }
     </style>
 </head>
 <body class="bg-gray-100 text-gray-800 h-screen flex overflow-hidden font-sans">
@@ -394,7 +403,8 @@
                                 <div id="cardTypeBadge" class="absolute top-0 right-0 bg-gray-100 text-gray-500 text-[10px] font-bold px-3 py-1 rounded-bl-xl uppercase tracking-wider">Geral</div>
                                 <span id="lblFrontDisplay" class="absolute top-6 left-6 text-[10px] font-bold text-gray-300 uppercase tracking-[0.2em]">Pergunta</span>
                                 
-                                <div id="cardFrontText" class="text-xl md:text-2xl text-center leading-relaxed w-full px-4 md:px-8 mt-4 card-html-content font-medium text-gray-700 select-text"></div>
+                                <div id="cardFrontText" class="leading-relaxed w-full px-4 md:px-8 mt-4 card-html-content font-medium text-gray-700 select-text" style="text-align: justify; font-size: 1.25rem;"></div>
+                                <div class="font-control"><button onclick="window.changeCardFont('front', -1)">A-</button><button onclick="window.changeCardFont('front', 1)">A+</button></div>
                                 
                                 <div id="objectiveStudyActions" class="hidden mt-6 w-full flex justify-center gap-3 z-20">
                                     <button onclick="window.checkObjectiveAnswer('certo', event)" class="bg-green-100 hover:bg-green-200 text-green-700 border border-green-200 px-4 py-2 rounded-lg font-bold text-sm shadow-sm transition w-24">
@@ -415,7 +425,8 @@
                                 
                                 <div id="objectiveFeedbackDisplay" class="hidden w-full text-center mb-4 px-4"></div>
 
-                                <div id="cardBackText" class="text-xl md:text-2xl text-center leading-relaxed w-full px-4 md:px-10 mt-2 mb-4 card-html-content text-gray-800 select-text"></div>
+                                <div id="cardBackText" class="leading-relaxed w-full px-4 md:px-10 mt-2 mb-4 card-html-content text-gray-800 select-text" style="text-align: justify; font-size: 1.25rem;"></div>
+                                <div class="font-control"><button onclick="window.changeCardFont('back', -1)">A-</button><button onclick="window.changeCardFont('back', 1)">A+</button></div>
                                 
                                 <div id="cardFooterInfo" class="bg-sky-50 p-3 rounded-lg border border-sky-100 flex flex-col gap-1 text-center mt-6 mx-8 hidden">
                                     <div id="cardLegalBasis" class="text-base text-sky-800 font-bold italic"></div>

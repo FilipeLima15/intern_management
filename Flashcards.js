@@ -2783,6 +2783,7 @@ function showCurrentCard() {
 
         document.getElementById('cardFrontText').innerHTML = frontHTML;
         document.getElementById('cardBackText').innerHTML = backHTML;
+        aplicarFonteCard(); // NOVO: aplica o tamanho de letra escolhido pelo usuário
         
         const badge = document.getElementById('cardTypeBadge');
         if (card.category === 'jurisprudencia') {
@@ -3164,12 +3165,48 @@ window.applyTooltips = function() {
         delay: [200, 0]
     });
 };
+
+// ===========================================================
+//  TAMANHO DA LETRA DO CARD — frente e verso, salvo no Firebase
+// ===========================================================
+
+// Aplica na tela os tamanhos guardados (frente e verso).
+function aplicarFonteCard() {
+    const front = document.getElementById('cardFrontText');
+    const back = document.getElementById('cardBackText');
+    // Tamanho padrão = 1.25rem (20px) se ainda não houver escolha salva
+    if (front) front.style.fontSize = (appPreferences.fontFront || 1.25) + 'rem';
+    if (back)  back.style.fontSize  = (appPreferences.fontBack  || 1.25) + 'rem';
+}
+
+// Aumenta (+1) ou diminui (-1) a letra da frente ou do verso e salva.
+window.changeCardFont = async function(lado, direcao) {
+    const passo = 0.1;          // quanto muda a cada clique
+    const minimo = 0.8, maximo = 2.4; // limites de tamanho (rem)
+    const chave = (lado === 'front') ? 'fontFront' : 'fontBack';
+
+    let atual = appPreferences[chave] || 1.25;
+    atual = Math.min(maximo, Math.max(minimo, atual + (direcao * passo)));
+    appPreferences[chave] = Math.round(atual * 100) / 100; // arredonda bonito
+
+    aplicarFonteCard(); // mostra o efeito na hora
+
+    // Salva no Firebase (mesmo cantinho das outras preferências)
+    try {
+        await set(ref(db, `users/${currentUserUID}/anki/preferences`), appPreferences);
+    } catch (e) {
+        console.error("Erro ao salvar tamanho da letra:", e);
+    }
+};
+
 window.savePreferences = async function() {
     appPreferences = {
+        ...appPreferences, // NOVO: mantém os tamanhos de letra já guardados
         streak:   document.getElementById('prefStreak').checked,
         cardTime: document.getElementById('prefCardTime').checked,
         tooltips: document.getElementById('prefTooltips').checked
     };
+
     try {
         await set(ref(db, `users/${currentUserUID}/anki/preferences`), appPreferences);
         window.applyTooltips(); // NOVO: liga/desliga as tooltips na hora
