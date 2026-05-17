@@ -171,6 +171,12 @@
                     <h1 class="text-xl font-bold text-gray-800 flex items-center gap-2 mr-4">
                         <i class="fa-solid fa-layer-group text-sky-600"></i> Flashcards
                     </h1>
+
+                    <div id="streakBadge" class="hidden items-center gap-2 bg-orange-50 border border-orange-200 text-orange-600 px-3 py-1.5 rounded-full font-bold text-sm shadow-sm" title="Dias seguidos de estudo">
+                        <i class="fa-solid fa-fire"></i>
+                        <span id="streakCount">0</span>
+                        <span class="text-[10px] font-semibold text-orange-400 uppercase tracking-wide">dias</span>
+                    </div>
                     
                     <div class="flex h-full" id="mainNavContainer">
                         <div class="main-nav-tab active" onclick="window.switchMainTab('conteudo')" id="nav-conteudo">
@@ -313,6 +319,10 @@
                 <div class="w-full text-center mb-4">
                     <h2 id="deckTitleDisplay" class="text-2xl md:text-3xl font-extrabold text-sky-700 tracking-tight drop-shadow-sm"></h2>
                     <span id="studyCounter" class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1 block">0 restantes</span>
+                    <span id="cardTimeBadge" class="hidden mt-2 mx-auto items-center gap-1.5 bg-sky-50 border border-sky-100 text-sky-600 px-3 py-1 rounded-full font-bold text-xs shadow-sm w-fit">
+                        <i class="fa-solid fa-stopwatch"></i>
+                        <span id="cardTimeValue">0s</span>
+                    </span>
                 </div>
 
                 <div class="flex flex-col md:flex-row gap-6 items-start justify-center h-full w-full">

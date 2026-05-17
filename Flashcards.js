@@ -487,6 +487,7 @@ async function loadAnkiData() {
     try {
         await loadPreferences(); // NOVO: carrega as preferências do painel de configurações
         setTimeout(() => window.applyTooltips(), 300); // NOVO: aplica as tooltips após a tela montar
+        setTimeout(() => window.atualizarStreakBadge(), 400); // NOVO: mostra a plaquinha de ofensiva
         const cardsSnap = await get(ref(db, `users/${currentUserUID}/anki/cards`));
         allCards = cardsSnap.exists() ? cardsSnap.val() : {};
         
@@ -2465,8 +2466,80 @@ function formatReviewDate(days) {
     return `${dd}/${mes} ${horario}`;
 }
 
+// ===========================================================
+//  OFENSIVA / STREAK — dias seguidos de estudo de flashcards
+//  Carimbos guardados em: anki/studyDays  (cantinho próprio e novo)
+// ===========================================================
+
+// Devolve a data de hoje no formato "AAAA-MM-DD".
+function _hojeChave(d = new Date()) {
+    return d.getFullYear() + '-' +
+           String(d.getMonth() + 1).padStart(2, '0') + '-' +
+           String(d.getDate()).padStart(2, '0');
+}
+
+// Grava o "carimbo" de que você estudou hoje (chamado ao concluir a sessão).
+async function registrarDiaEstudado() {
+    if (!currentUserUID) return;
+    try {
+        const hoje = _hojeChave();
+        await update(ref(db, `users/${currentUserUID}/anki/studyDays`), { [hoje]: true });
+    } catch (e) {
+        console.error("Erro ao registrar dia de estudo:", e);
+    }
+}
+
+// Lê os carimbos e calcula quantos dias seguidos você estudou.
+async function calcularStreak() {
+    if (!currentUserUID) return 0;
+    try {
+        const snap = await get(ref(db, `users/${currentUserUID}/anki/studyDays`));
+        if (!snap.exists()) return 0;
+        const dias = snap.val(); // ex.: { "2026-05-17": true, ... }
+
+        let streak = 0;
+        const cursor = new Date();
+
+        // Se ainda não estudou HOJE, a contagem pode começar por ONTEM
+        // (assim a ofensiva não "zera" só porque o dia ainda não acabou).
+        if (!dias[_hojeChave(cursor)]) {
+            cursor.setDate(cursor.getDate() - 1);
+        }
+
+        // Conta para trás enquanto houver um carimbo em cada dia.
+        while (dias[_hojeChave(cursor)]) {
+            streak++;
+            cursor.setDate(cursor.getDate() - 1);
+        }
+        return streak;
+    } catch (e) {
+        console.error("Erro ao calcular streak:", e);
+        return 0;
+    }
+}
+
+// Mostra ou esconde a plaquinha 🔥 conforme o interruptor "Ofensiva".
+window.atualizarStreakBadge = async function() {
+    const badge = document.getElementById('streakBadge');
+    if (!badge) return;
+
+    // Interruptor desligado → plaquinha some
+    if (!appPreferences.streak) {
+        badge.classList.add('hidden');
+        badge.classList.remove('flex');
+        return;
+    }
+
+    const dias = await calcularStreak();
+    document.getElementById('streakCount').innerText = dias;
+    badge.classList.remove('hidden');
+    badge.classList.add('flex');
+};
+
 // --- ETAPA 2: FINALIZA A SESSÃO MOSTRANDO O PLACAR DE ACERTOS/ERROS ---
 function finishStudySession() {
+    registrarDiaEstudado();                          // NOVO: carimba o dia como "estudado"
+    setTimeout(() => window.atualizarStreakBadge(), 500); // NOVO: atualiza a plaquinha 🔥
     const viewStudy = document.getElementById('viewStudy');
     const viewDecks = document.getElementById('viewDecks');
     const viewEmpty = document.getElementById('viewEmpty');
@@ -2504,6 +2577,60 @@ function updateUndoButton() {
     }
 }
 
+// ===========================================================
+//  TEMPO POR CARD — mede quanto tempo você leva em cada card
+// ===========================================================
+
+let _cardStartTime = 0;     // momento em que o card apareceu
+let _cardTimerInterval = null; // contador que atualiza a plaquinha
+
+// Liga o cronômetro quando um card aparece na tela.
+function iniciarCronometroCard() {
+    pararCronometroCard(); // garante que não há outro rodando
+    _cardStartTime = Date.now();
+
+    const badge = document.getElementById('cardTimeBadge');
+    if (!badge) return;
+
+    // Interruptor desligado → plaquinha some e nem conta
+    if (!appPreferences.cardTime) {
+        badge.classList.add('hidden');
+        badge.classList.remove('flex');
+        return;
+    }
+
+    badge.classList.remove('hidden');
+    badge.classList.add('flex');
+
+    // Atualiza o número na tela a cada segundo
+    _cardTimerInterval = setInterval(() => {
+        const seg = Math.floor((Date.now() - _cardStartTime) / 1000);
+        const el = document.getElementById('cardTimeValue');
+        if (el) el.innerText = seg + 's';
+    }, 1000);
+}
+
+// Para o cronômetro e devolve quantos SEGUNDOS o card levou.
+function pararCronometroCard() {
+    if (_cardTimerInterval) {
+        clearInterval(_cardTimerInterval);
+        _cardTimerInterval = null;
+    }
+    if (!_cardStartTime) return 0;
+    const seg = Math.round((Date.now() - _cardStartTime) / 1000);
+    _cardStartTime = 0;
+    return seg;
+}
+
+// Formata segundos em texto curto (ex.: 45s  ou  1m20s).
+function formatarTempoCard(seg) {
+    if (!seg || seg < 1) return '--';
+    if (seg < 60) return seg + 's';
+    const m = Math.floor(seg / 60);
+    const s = seg % 60;
+    return s > 0 ? `${m}m${s}s` : `${m}m`;
+}
+
 function showCurrentCard() {
     if (!studyQueue || studyQueue.length === 0 || currentCardIndex >= studyQueue.length) {
         // ETAPA 2: em vez de voltar direto, mostra a tela final com o placar
@@ -2517,6 +2644,8 @@ function showCurrentCard() {
         showCurrentCard();
         return;
     }
+
+    iniciarCronometroCard(); // NOVO: liga o cronômetro deste card
 
     // ETAPA 2: atualiza o botão Desfazer (só fica ativo se houver o que desfazer)
     updateUndoButton();
@@ -2861,6 +2990,17 @@ window.rateCard = async function(rating) {
             // ETAPA 3: marca este card como "respondido nesta volta"
             progressData.roundDone = true;
 
+            // NOVO: tempo por card — guarda a média de segundos gastos neste card
+            const tempoGasto = pararCronometroCard();
+            if (appPreferences.cardTime && tempoGasto > 0) {
+                const respostasAnteriores = (card.hitCount || 0) + (card.missCount || 0);
+                const mediaAnterior = card.avgTime || 0;
+                // Média ponderada: junta o histórico antigo com a medição de agora
+                progressData.avgTime = Math.round(
+                    ((mediaAnterior * respostasAnteriores) + tempoGasto) / (respostasAnteriores + 1)
+                );
+            }
+
             const updatedCard = { ...card, ...progressData };
             updates[`users/${currentUserUID}/anki/cards/${card.firebaseKey}`] = updatedCard;
             
@@ -3033,6 +3173,7 @@ window.savePreferences = async function() {
     try {
         await set(ref(db, `users/${currentUserUID}/anki/preferences`), appPreferences);
         window.applyTooltips(); // NOVO: liga/desliga as tooltips na hora
+        window.atualizarStreakBadge(); // NOVO: mostra/esconde a plaquinha de ofensiva na hora
         // Mostra o aviso "Salvo!" por 1,5 segundo
         const status = document.getElementById('prefSaveStatus');
         if (status) {
@@ -3157,6 +3298,12 @@ window.renderManagerList = function() {
         // ETAPA 2: célula com contadores de acerto e erro do card
         const hits = card.hitCount || 0;
         const miss = card.missCount || 0;
+        // NOVO: tempo médio do card (só aparece se houver medição)
+        const tempoBadge = card.avgTime
+            ? `<span class="inline-flex items-center gap-1 text-[11px] font-bold text-sky-600 bg-sky-50 border border-sky-100 px-2 py-0.5 rounded" title="Tempo médio por resposta">
+                    <i class="fa-solid fa-stopwatch"></i> ${formatarTempoCard(card.avgTime)}
+               </span>`
+            : '';
         const statsCell = `
             <div class="flex items-center justify-center gap-2">
                 <span class="inline-flex items-center gap-1 text-[11px] font-bold text-green-600 bg-green-50 border border-green-100 px-2 py-0.5 rounded" title="Acertos">
@@ -3165,6 +3312,7 @@ window.renderManagerList = function() {
                 <span class="inline-flex items-center gap-1 text-[11px] font-bold text-red-500 bg-red-50 border border-red-100 px-2 py-0.5 rounded" title="Erros">
                     <i class="fa-solid fa-xmark"></i> ${miss}
                 </span>
+                ${tempoBadge}
             </div>`;
 
         // --- BOTÃO NOVO ADICIONADO ABAIXO (AMARELO) ---
